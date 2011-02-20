@@ -184,7 +184,7 @@ void g13_parse_keys(unsigned char *buf, int file) {
   cout << hex << setw(2) << setfill('0') << (int)buf[6];
   cout << hex << setw(2) << setfill('0') << (int)buf[5];
   cout << hex << setw(2) << setfill('0') << (int)buf[4];
-  cout << hex << setw(2) << setfill('0') << (int)buf[3] << endl;*
+  cout << hex << setw(2) << setfill('0') << (int)buf[3] << endl;*/
 }
 
 void g13_init_lcd(libusb_device_handle *handle) {
