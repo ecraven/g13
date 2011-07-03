@@ -3,7 +3,7 @@
 #include <string.h>
 #include <cstdio>
 using namespace std;
-
+// convert a .pbm raw file to our custom .lpbm format
 
 int main(int argc, char *argv[]) {
   unsigned char c;
