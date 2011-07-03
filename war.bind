@@ -1,0 +1,19 @@
+bind G1 KEY_1
+bind G2 KEY_2
+bind G3 KEY_3
+bind G4 KEY_W # walk forward
+bind G5 KEY_4
+bind G6 KEY_5
+bind G7 KEY_6
+bind G10 KEY_Q
+bind G11 KEY_S
+bind G12 KEY_E
+bind G15 KEY_SPACE
+bind G20 KEY_M # map
+bind G21 KEY_F1 # target self
+bind G22 KEY_LEFTALT
+bind G19 KEY_F3
+bind STICK_LEFT KEY_A
+bind STICK_RIGHT KEY_D
+bind STICK_UP KEY_W
+bind STICK_DOWN KEY_S

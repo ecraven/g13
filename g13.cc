@@ -627,18 +627,20 @@ g13_keypad::g13_keypad(libusb_device_handle *handle, int id) {
     uinput_file = -1;
     for(int i = 0; i < sizeof(keys); i++)
       keys[i] = false;
+    for(int i = 0; i < G13_NUM_KEYS; i++)
+      map[i] = KEY_A;
     /*      map = { KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H,
               KEY_I, KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P,
               KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, 0, 0,
               KEY_W, KEY_X, KEY_Y, KEY_Z, KEY_1, KEY_2, KEY_3, KEY_4,
               KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_F1, KEY_F2 };*/
     // starcraft 2
-    map = { KEY_5, KEY_3, KEY_1, KEY_0, KEY_2, KEY_4, KEY_6,
-            KEY_V, KEY_F, KEY_E, KEY_C, KEY_B, KEY_G, KEY_I,
-            KEY_LEFTSHIFT, KEY_M, KEY_T, KEY_L, KEY_H,
-            KEY_A, KEY_S, KEY_LEFTCTRL, 0, 0,
-            KEY_F1, KEY_N, KEY_R, KEY_P, KEY_K, KEY_D, KEY_X, KEY_Y,
-            KEY_Z, KEY_TAB, KEY_W, KEY_BACKSPACE, 0, 0, 0, 0};
+    // map = { KEY_5, KEY_3, KEY_1, KEY_0, KEY_2, KEY_4, KEY_6,
+    //         KEY_V, KEY_F, KEY_E, KEY_C, KEY_B, KEY_G, KEY_I,
+    //         KEY_LEFTSHIFT, KEY_M, KEY_T, KEY_L, KEY_H,
+    //         KEY_A, KEY_S, KEY_LEFTCTRL, 0, 0,
+    //         KEY_F1, KEY_N, KEY_R, KEY_P, KEY_K, KEY_D, KEY_X, KEY_Y,
+    // 	    KEY_Z, KEY_TAB, KEY_W, KEY_BACKSPACE, 0, 0, 0, 0};
     }
 
     void g13_keypad::command(char const *str) {
