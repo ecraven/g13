@@ -1,0 +1,48 @@
+* Userspace driver for the G13
+** Installation
+Compile by running
+
+> make
+
+If you want to run the daemon as user, put the file 91-g13.rules into /etc/udev/rules.d/ (or whatever directory your distribution uses).
+
+** Running
+Connect your device, then run ./g13, it should automatically find your device.
+
+If you see output like
+
+Known keys on G13:
+BD DOWN G1 G10 G11 G12 G13 G14 G15 G16 G17 G18 G19 G2 G20 G21 G22 G3 G4 G5 G6 G7 G8 G9 L1 L2 L3 L4 LEFT LIGHT LIGHT_STATE M1 M2 M3 MR TOP STICK_LEFT STICK_RIGHT STICK_UP STICK_DOWN 
+Known keys to map to:
+KEY_0 KEY_1 KEY_2 KEY_3 KEY_4 KEY_5 KEY_6 KEY_7 KEY_8 KEY_9 KEY_A KEY_APOSTROPHE KEY_B KEY_BACKSLASH KEY_BACKSPACE KEY_C KEY_CAPSLOCK KEY_COMMA KEY_D KEY_DOT KEY_DOWN KEY_E KEY_ENTER KEY_EQUAL KEY_ESC KEY_F KEY_F1 KEY_F10 KEY_F2 KEY_F3 KEY_F4 KEY_F5 KEY_F6 KEY_F7 KEY_F8 KEY_F9 KEY_G KEY_GRAVE KEY_H KEY_I KEY_J KEY_K KEY_KP0 KEY_KP1 KEY_KP2 KEY_KP3 KEY_KP4 KEY_KP5 KEY_KP6 KEY_KP7 KEY_KP8 KEY_KP9 KEY_KPASTERISK KEY_KPDOT KEY_KPMINUS KEY_KPPLUS KEY_L KEY_LEFT KEY_LEFTALT KEY_LEFTBRACE KEY_LEFTCTRL KEY_LEFTSHIFT KEY_M KEY_MINUS KEY_N KEY_NUMLOCK KEY_O KEY_P KEY_Q KEY_R KEY_RIGHT KEY_RIGHTBRACE KEY_RIGHTSHIFT KEY_S KEY_SCROLLLOCK KEY_SEMICOLON KEY_SLASH KEY_SPACE KEY_T KEY_TAB KEY_U KEY_UP KEY_V KEY_W KEY_X KEY_Y KEY_Z 
+Found 1 G13s
+
+that is good. This also shows you which name the keys on the G13 have, and what keys you can bind them to.
+
+** Commands
+
+The daemon creates a pipe at /tmp/g13-0, you can send commands via that pipe (e.g. by running "echo rgb 0 255 0 > /tmp/g13-0")
+
+*** rgb <r> <g> <b>
+
+Sets the background color
+
+*** mod <n>
+
+Sets the background light of the mod-keys. <n> is the sum of 1 (M1), 2 (M2), 4 (M3) and 8 (MR) (i.e. 13 
+would set M1, M3 and MR, and unset M2).
+
+*** bind <keyname> <binding>
+
+This binds a key. The possible values of <keyname> are shown upon startup (e.g. G1), same for <binding> (e.g. KEY_LEFTSHIFT).
+
+*** Stick mode
+
+The stick can be used as an absolute input device or can send key events. Right now there is no command for this, you need to edit the source (file g13.cc, around line 622, this->stick_mode = STICK_KEYS, change to this->stick_mode = STICK_ABSOLUTE).
+
+You can bind the stick keys by binding the keynames STICK_LEFT, STICK_RIGHT, STICK_UP and STICK_DOWN.
+
+*** LED display
+
+Use pbm2lpbm to convert a pbm image to the correct format, then just cat that into the pipe (cat starcraft2.lpbm > /tmp/g13-0).
+The pbm file must be 160x43 pixels.

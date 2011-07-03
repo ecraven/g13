@@ -405,7 +405,7 @@ void g13_read_commands(g13_keypad *g13) {
       g13->image(buf, ret);
     } else {
       std::string buffer = reinterpret_cast<const char*>(buf);
-      cout << "cmd size: " << buffer.size() << endl;
+      cout << "command: " << buffer << endl;
       std::vector<std::string> lines;
       boost::split(lines, buffer, boost::is_any_of("\n\r"));
       //      std::cout << "INFO: lines: " << lines.size() << std::endl;
