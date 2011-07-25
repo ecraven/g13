@@ -420,7 +420,6 @@ void g13_read_commands(g13_keypad *g13) {
       g13->image(buf, ret);
     } else {
       std::string buffer = reinterpret_cast<const char*>(buf);
-      cout << "command: " << buffer << endl;
       std::vector<std::string> lines;
       boost::split(lines, buffer, boost::is_any_of("\n\r"));
       //      std::cout << "INFO: lines: " << lines.size() << std::endl;
@@ -428,8 +427,10 @@ void g13_read_commands(g13_keypad *g13) {
         std::vector<std::string> command;
         boost::split(command, cmd, boost::is_any_of("#"));
         //        std::cout << "INFO: command [" << command.size() << "]: " << command[0] << " (" << command[0].size() << ")" << std::endl;
-        if(command.size() > 0 && command[0] != std::string(""))
+        if(command.size() > 0 && command[0] != std::string("")) {
+	  cout << "command: " << command[0] << endl;
           g13->command(command[0].c_str());
+	}
       }
     }
   }}
