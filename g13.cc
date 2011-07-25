@@ -351,7 +351,22 @@ int g13_read_keys(g13_keypad *g13) {
   int size;
   int error = libusb_interrupt_transfer(g13->handle, LIBUSB_ENDPOINT_IN | G13_KEY_ENDPOINT, buffer, G13_REPORT_SIZE, &size, 1000);
   if(error && error != LIBUSB_ERROR_TIMEOUT) {
-    cerr << "Error while reading keys: " << error << endl;
+    std::map<int,std::string> errors;
+    errors[LIBUSB_SUCCESS] = "LIBUSB_SUCCESS";
+    errors[LIBUSB_ERROR_IO] = "LIBUSB_ERROR_IO";
+    errors[LIBUSB_ERROR_INVALID_PARAM] = "LIBUSB_ERROR_INVALID_PARAM";
+    errors[LIBUSB_ERROR_ACCESS] = "LIBUSB_ERROR_ACCESS";
+    errors[LIBUSB_ERROR_NO_DEVICE] = "LIBUSB_ERROR_NO_DEVICE";
+    errors[LIBUSB_ERROR_NOT_FOUND] = "LIBUSB_ERROR_NOT_FOUND";
+    errors[LIBUSB_ERROR_BUSY] = "LIBUSB_ERROR_BUSY";
+    errors[LIBUSB_ERROR_TIMEOUT] = "LIBUSB_ERROR_TIMEOUT";
+    errors[LIBUSB_ERROR_OVERFLOW] = "LIBUSB_ERROR_OVERFLOW";
+    errors[LIBUSB_ERROR_PIPE] = "LIBUSB_ERROR_PIPE";
+    errors[LIBUSB_ERROR_INTERRUPTED] = "LIBUSB_ERROR_INTERRUPTED";
+    errors[LIBUSB_ERROR_NO_MEM] = "LIBUSB_ERROR_NO_MEM";
+    errors[LIBUSB_ERROR_NOT_SUPPORTED] = "LIBUSB_ERROR_NOT_SUPPORTED";
+    errors[LIBUSB_ERROR_OTHER    ] = "LIBUSB_ERROR_OTHER    ";
+    cerr << "Error while reading keys: " << error << " (" << errors[error] << ")" << endl;
     cerr << "Stopping daemon" << endl;
     return -1;
   }
