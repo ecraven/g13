@@ -506,6 +506,7 @@ void init_keynames() {
   inpk(KEY_RIGHTBRACE);
   inpk(KEY_ENTER);
   inpk(KEY_LEFTCTRL);
+  inpk(KEY_RIGHTCTRL);
   inpk(KEY_A);
   inpk(KEY_S);
   inpk(KEY_D);
@@ -533,6 +534,7 @@ void init_keynames() {
   inpk(KEY_RIGHTSHIFT);
   inpk(KEY_KPASTERISK);
   inpk(KEY_LEFTALT);
+  inpk(KEY_RIGHTALT);
   inpk(KEY_SPACE);
   inpk(KEY_CAPSLOCK);
   inpk(KEY_F1);
@@ -564,6 +566,13 @@ void init_keynames() {
   inpk(KEY_RIGHT);
   inpk(KEY_UP);
   inpk(KEY_DOWN);
+  inpk(KEY_PAGEUP);
+  inpk(KEY_PAGEDOWN);
+  inpk(KEY_HOME);
+  inpk(KEY_END);
+  inpk(KEY_INSERT);
+  inpk(KEY_DELETE);
+
 }
 void display_keys() {
   typedef std::map<std::string,int> mapType;
