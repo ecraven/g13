@@ -367,8 +367,8 @@ int g13_read_keys(g13_keypad *g13) {
     errors[LIBUSB_ERROR_NOT_SUPPORTED] = "LIBUSB_ERROR_NOT_SUPPORTED";
     errors[LIBUSB_ERROR_OTHER    ] = "LIBUSB_ERROR_OTHER    ";
     cerr << "Error while reading keys: " << error << " (" << errors[error] << ")" << endl;
-    cerr << "Stopping daemon" << endl;
-    return -1;
+    //    cerr << "Stopping daemon" << endl;
+    //    return -1;
   }
   if(size == G13_REPORT_SIZE) {
     g13_parse_joystick(buffer, g13);
