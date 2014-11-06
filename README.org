@@ -48,3 +48,6 @@ You can bind the stick keys by binding the keynames STICK_LEFT, STICK_RIGHT, STI
 
 Use pbm2lpbm to convert a pbm image to the correct format, then just cat that into the pipe (cat starcraft2.lpbm > /tmp/g13-0).
 The pbm file must be 160x43 pixels.
+
+* License
+This code is placed in the public domain. Do with it whatever you want.
