@@ -1,7 +1,7 @@
-all: g13 pbm2lpbm
+all: g13d pbm2lpbm
 
-g13: g13.h g13.cc
-	g++ -o g13 -std=c++0x g13.cc -lusb-1.0
+g13d: g13.h g13.cc
+	g++ -o g13d -std=c++0x g13.cc -lusb-1.0
 
 pbm2lpbm: pbm2lpbm.c
 	g++ -o pbm2lpbm pbm2lpbm.c
