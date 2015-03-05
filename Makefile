@@ -1,5 +1,5 @@
 GROUP='usb'
-PREFIX='/usr/local/g13-userspace'
+PREFIX='.'
 
 all: g13d pbm2lpbm 91-g13.rules clock.sh
 
