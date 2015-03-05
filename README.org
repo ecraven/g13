@@ -33,8 +33,9 @@ If you have problems check that /etc/udev/rules.d is the correct udev rules
 location for your distribution.
 
 If you would like to change the name of the group used, then use the following
-option with make to change it:
+option with make to change it: 
 
+> make clean
 > GROUP='newgroup' make 
 
 ** Running
