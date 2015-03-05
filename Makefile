@@ -1,5 +1,5 @@
-GROUP='usb'
-PREFIX='.'
+GROUP = 'usb'
+PREFIX = '.'
 
 all: g13d pbm2lpbm 91-g13.rules clock.sh
 
@@ -27,4 +27,4 @@ package:
 	tar cjf g13-userspace.tbz2 g13-userspace
 	rm -Rf g13-userspace
 clean: 
-	rm -f g13 pbm2lpbm
+	rm -f g13 pbm2lpbm clock.sh 91-g13.rules
