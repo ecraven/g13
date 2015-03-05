@@ -1,2 +1,0 @@
-SUBSYSTEM=="usb", ATTR{idVendor}=="046d", ATTR{idProduct}=="c21c", MODE="0660", GROUP="usb"
-KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="usb"
