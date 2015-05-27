@@ -547,6 +547,8 @@ void init_keynames() {
   inpk(KEY_F8);
   inpk(KEY_F9);
   inpk(KEY_F10);
+  inpk(KEY_F11);
+  inpk(KEY_F12);
   inpk(KEY_NUMLOCK);
   inpk(KEY_SCROLLLOCK);
   inpk(KEY_KP7);
