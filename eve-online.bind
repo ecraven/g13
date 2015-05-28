@@ -1,0 +1,26 @@
+bind G1 KEY_F1
+bind G2 KEY_F2
+bind G3 KEY_F3
+bind G4 KEY_F4
+bind G5 KEY_F5
+bind G6 KEY_F6
+bind G7 KEY_F7
+bind G8 KEY_T # show info
+bind G9 KEY_S # warp to
+bind G10 KEY_Q # approach
+bind G11 KEY_A # align to
+bind G12 KEY_W # orbit
+bind G13 KEY_E # keep at range
+bind G15 KEY_LEFTSHIFT
+bind G16 KEY_F # drones engage
+bind G17 KEY_G # drones return and orbit
+bind G18 KEY_H # drones return to drone bay
+bind G19 KEY_LEFTCTRL
+bind G20 KEY_LEFTALT
+bind G22 KEY_LEFTCTRL
+bind LEFT KEY_KPPLUS
+bind DOWN KEY_KPMINUS
+bind STICK_LEFT KEY_RIGHT
+bind STICK_RIGHT KEY_LEFT
+bind STICK_UP KEY_UP
+bind STICK_DOWN KEY_DOWN
