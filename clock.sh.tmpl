@@ -1,4 +1,8 @@
 #!/bin/bash
+
+PATH=$PATH:!!PREFIX!!
+export PATH
+
 center_x=30
 center_y=20
 diameter=18
@@ -37,6 +41,6 @@ min_x=$(echo "scale=3;$center_x + $min_orig_y * s($min/60*(2*4*a(1)))" | bc -l)
 min_y=$(echo "scale=3;$center_y - $min_orig_y * c($min/60*(2*4*a(1)))" | bc -l)
 preparams="-size 160x43 xc:white -stroke black -fill white -draw \"circle 30,20 30,2\" -draw \"line 30,20 $sec_x,$sec_y\" -draw \"line 30,20 $min_x,$min_y\" -draw \"line 30,20 $hr_x,$hr_y\" "
 postparams="-pointsize 16 -fill black -font Courier -draw \"text 60,15 '$Date'\" -draw \"text 68,35 '$Time'\" pbm:- "
-eval convert $preparams $ticks $postparams | ./pbm2lpbm > /tmp/g13-0
+eval convert $preparams $ticks $postparams | pbm2lpbm > /tmp/g13-0
 sleep 1
 done

@@ -2,11 +2,41 @@
 ** Installation
 Make sure you have boost and libusb-1.0 installed.
 
+You should also create
+
 Compile by running
 
 > make
 
-If you want to run the daemon as user, put the file 91-g13.rules into /etc/udev/rules.d/ (or whatever directory your distribution uses).
+Note that the default prefix is ".". If you would like make install and 
+the clock shell script to use a different directory (such as /usr/local/bin)
+then use the following:
+
+> make PREFIX=/usr/local/bin 
+
+** Install for non-root use
+
+In order to run the g13 deamon as a user, file permissions in /dev
+need to be fixed. In order to do this you should do the following:
+
+1. Create the group: sudo groupadd --system usb
+2. add yourself and any other users who will use g13 to the new group: 
+  sudo usermod -a -G usb USERNAME
+3. copy the file 91-g13.rules into /etc/udev/rules.d/:
+  sudo cp 91-g13.rules /etc/udev/rules.d
+4. run udevadm trigger
+5. run: sudo make PREFIX='/usr/local/bin' install 
+
+If you are logged in as the user, you will need to logout and back in.
+
+If you have problems check that /etc/udev/rules.d is the correct udev rules
+location for your distribution.
+
+If you would like to change the name of the group used, then use the following
+option with make to change it: 
+
+> make clean
+> make GROUP='newgroup'
 
 ** Running
 Connect your device, then run ./g13, it should automatically find your device.
