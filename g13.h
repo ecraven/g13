@@ -1,5 +1,6 @@
 #include <string>
 #include <map>
+#include "g13map.h"
 
 #define null 0
 
@@ -23,15 +24,9 @@ struct g13_keypad {
   stick_mode_t stick_mode;
   int stick_keys[4];
   g13_keypad(libusb_device_handle *handle, int id);
-  int map[G13_NUM_KEYS];
 
-  void set_mapping(int mapping[G13_NUM_KEYS]) {
-    for(int i = 0; i < G13_NUM_KEYS; i++)
-      map[i] = mapping[i];
-  }
-  int mapping(int key) {
-    return map[key];
-  }
+  g13map* keymap;
+
   bool keys[G13_NUM_KEYS];
   bool is_set(int key) {
     return keys[key];
