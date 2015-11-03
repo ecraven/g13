@@ -142,8 +142,14 @@ void g13_parse_key(int key, unsigned char *byte, g13_keypad *g13) {
   unsigned char actual_byte = byte[key / 8];
   unsigned char mask = 1 << (key % 8);
   if(bool value = g13->update(key, actual_byte & mask)) {
-//    cout << g13->mapping(key) << ": " << g13->is_set(key) << endl;
-    send_event(g13->uinput_file, EV_KEY, g13->mapping(key), g13->is_set(key));
+
+    const std::list<int>& keys = g13->keymap->mapping(key);
+
+    for (std::list<int>::const_iterator it = keys.begin(); it!= keys.end(); it++) {
+       // std::cout << *it << ": " << g13->is_set(key) << std::endl;
+       send_event(g13->uinput_file, EV_KEY, *it, g13->is_set(key));
+    }
+
   }
 }
 void g13_parse_keys(unsigned char *buf, g13_keypad *g13) {
@@ -395,6 +401,7 @@ void cleanup(int n = 0) {
     g13_destroy_uinput(g13s[i]);
     g13_destroy_fifo(g13s[i]);
     g13_deregister(g13s[i]);
+    delete g13s[i]->keymap;
     delete g13s[i];
   }
   libusb_exit(ctx);
@@ -654,23 +661,11 @@ g13_keypad::g13_keypad(libusb_device_handle *handle, int id) {
     uinput_file = -1;
     for(int i = 0; i < sizeof(keys); i++)
       keys[i] = false;
-    for(int i = 0; i < G13_NUM_KEYS; i++)
-      map[i] = KEY_A;
-    /*      map = { KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H,
-              KEY_I, KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P,
-              KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, 0, 0,
-              KEY_W, KEY_X, KEY_Y, KEY_Z, KEY_1, KEY_2, KEY_3, KEY_4,
-              KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_F1, KEY_F2 };*/
-    // starcraft 2
-    // map = { KEY_5, KEY_3, KEY_1, KEY_0, KEY_2, KEY_4, KEY_6,
-    //         KEY_V, KEY_F, KEY_E, KEY_C, KEY_B, KEY_G, KEY_I,
-    //         KEY_LEFTSHIFT, KEY_M, KEY_T, KEY_L, KEY_H,
-    //         KEY_A, KEY_S, KEY_LEFTCTRL, 0, 0,
-    //         KEY_F1, KEY_N, KEY_R, KEY_P, KEY_K, KEY_D, KEY_X, KEY_Y,
-    // 	    KEY_Z, KEY_TAB, KEY_W, KEY_BACKSPACE, 0, 0, 0, 0};
-    }
 
-    void g13_keypad::command(char const *str) {
+    keymap = new g13map(G13_NUM_KEYS);
+}
+
+void g13_keypad::command(char const *str) {
     int red, green, blue, mod;
     char keyname[256];
     char binding[256];
@@ -684,7 +679,9 @@ g13_keypad::g13_keypad(libusb_device_handle *handle, int id) {
         int bind = input_name_to_key[binding];
         if(name_to_key.find(keyname) != name_to_key.end()) {
           int key = name_to_key[keyname];
-          map[key] = bind;
+
+          keymap->bind(key, str, input_name_to_key);
+
         } else if(key_name == "STICK_LEFT") {
           this->stick_keys[STICK_LEFT] = bind;
         } else if(key_name == "STICK_RIGHT") {
