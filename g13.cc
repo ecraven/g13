@@ -1,9 +1,12 @@
 #include <libusb-1.0/libusb.h>
 #include <iostream>
 #include <vector>
+#include <cerrno>
+#include <memory>
 #include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/log/trivial.hpp>
 #include <iomanip>
 #include <sys/stat.h>
 #include "logo.h"
@@ -16,6 +19,7 @@
 #include <linux/uinput.h>
 #include <fcntl.h>
 #include "g13.h"
+#include "g13logging.h"
 
 using namespace std;
 
@@ -74,7 +78,7 @@ void g13_set_mode_leds(libusb_device_handle *handle, int leds) {
   usb_data[1] = leds;
   int r = libusb_control_transfer(handle, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 9, 0x305, 0, usb_data, 5, 1000);
   if(r != 5) {
-    cerr << "Problem sending data" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Problem sending leds data";
     return;
   }
 }
@@ -87,7 +91,7 @@ void g13_set_key_color(libusb_device_handle *handle, int red, int green, int blu
 
   error = libusb_control_transfer(handle, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 9, 0x307, 0, usb_data, 5, 1000);
   if(error != 5) {
-    cerr << "Problem sending data" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Problem sending color data";
     return;
   }
 }
@@ -100,8 +104,18 @@ void send_event(int file, int type, int code, int val) {
   event.type = type;
   event.code = code;
   event.value = val;
-  write(file, &event, sizeof(event));
+
+  const int result = write(file, &event, sizeof(event));
+
+  if (result != sizeof(event)) {
+    if (result == -1) {
+      BOOST_LOG_TRIVIAL(error) << "Problem writing uinput event: result=" << result << ", error=" << strerror(errno);
+    } else {
+      BOOST_LOG_TRIVIAL(error) << "Problem writing uinput event: result=" << result;
+    }
+  }
 }
+
 void g13_parse_joystick(unsigned char *buf, g13_keypad *g13) {
   int stick_x = buf[1];
   int stick_y = buf[2];
@@ -146,7 +160,7 @@ void g13_parse_key(int key, unsigned char *byte, g13_keypad *g13) {
     const std::list<int>& keys = g13->keymap->mapping(key);
 
     for (std::list<int>::const_iterator it = keys.begin(); it!= keys.end(); it++) {
-       // std::cout << *it << ": " << g13->is_set(key) << std::endl;
+       BOOST_LOG_TRIVIAL(debug) << "parsekey:" << *it << ": " << g13->is_set(key);
        send_event(g13->uinput_file, EV_KEY, *it, g13->is_set(key));
     }
 
@@ -204,7 +218,7 @@ void g13_parse_keys(unsigned char *buf, g13_keypad *g13) {
 void g13_init_lcd(libusb_device_handle *handle) {
   int error = libusb_control_transfer(handle, 0, 9, 1, 0, null, 0, 1000);
   if(error) {
-    cerr << "Error when initialising lcd endpoint" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Error when initialising lcd endpoint";
   }
 }
 void g13_deregister(g13_keypad *g13) {
@@ -217,22 +231,22 @@ void discover_g13s(libusb_device **devs, ssize_t count, vector<g13_keypad*>& g13
     libusb_device_descriptor desc;
     int r = libusb_get_device_descriptor(devs[i], &desc);
     if(r < 0) {
-      cout << "Failed to get device descriptor" << endl;
+      BOOST_LOG_TRIVIAL(error) << "Failed to get device descriptor";
       return;
     }
     if(desc.idVendor == G13_VENDOR_ID && desc.idProduct == G13_PRODUCT_ID) {
       libusb_device_handle *handle;
       int r = libusb_open(devs[i], &handle);
       if(r != 0) {
-        cerr << "Error opening G13 device" << endl;
+        BOOST_LOG_TRIVIAL(error) << "Error opening G13 device";
         return;
       }
       if(libusb_kernel_driver_active(handle, 0) == 1)
         if(libusb_detach_kernel_driver(handle, 0) == 0)
-          cout << "Kernel driver detached" << endl;
+          BOOST_LOG_TRIVIAL(info) << "Kernel driver detached";
       r = libusb_claim_interface(handle, 0);
       if(r < 0) {
-        cerr << "Cannot Claim Interface" << endl;
+        BOOST_LOG_TRIVIAL(error) << "Cannot Claim Interface";
         return;
       }
       g13s.push_back(new g13_keypad(handle, g13_count++));
@@ -245,7 +259,7 @@ void discover_g13s(libusb_device **devs, ssize_t count, vector<g13_keypad*>& g13
 void g13_write_lcd(libusb_context *ctx, libusb_device_handle *handle, unsigned char *data, size_t size) {
   g13_init_lcd(handle);
   if(size != G13_LCD_BUFFER_SIZE) {
-    cerr << "Invalid LCD data size " << size << ", should be " << G13_LCD_BUFFER_SIZE;
+    BOOST_LOG_TRIVIAL(error) << "Invalid LCD data size " << size << ", should be " << G13_LCD_BUFFER_SIZE;
     return;
   }
   unsigned char buffer[G13_LCD_BUFFER_SIZE + 32];
@@ -255,7 +269,7 @@ void g13_write_lcd(libusb_context *ctx, libusb_device_handle *handle, unsigned c
   int bytes_written;
   int error = libusb_interrupt_transfer(handle, LIBUSB_ENDPOINT_OUT | G13_LCD_ENDPOINT, buffer, G13_LCD_BUFFER_SIZE + 32, &bytes_written, 1000);
   if(error)
-    cerr << "Error when transfering image: " << error << ", " << bytes_written << " bytes written" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Error when transfering image: " << error << ", " << bytes_written << " bytes written";
 }
 int g13_create_fifo(g13_keypad *g13) {
   mkfifo(g13->fifo_name(), 0666);
@@ -268,16 +282,16 @@ int g13_create_uinput(g13_keypad *g13) {
                                : access("/dev/uinput", F_OK)==0 ? "/dev/uinput"
                                : 0;
   if(!dev_uinput_fname) {
-      cerr << "Could not find an uinput device" << endl;
+      BOOST_LOG_TRIVIAL(error) << "Could not find an uinput device";
       return -1;
   }
   if(access(dev_uinput_fname, W_OK) != 0) {
-      cerr << dev_uinput_fname << " doesn't grant write permissions" << endl;
+      BOOST_LOG_TRIVIAL(error) << dev_uinput_fname << " doesn't grant write permissions";
       return -1;
   }
   int ufile = open(dev_uinput_fname, O_WRONLY | O_NDELAY);
   if(ufile <= 0) {
-    cerr << "Could not open uinput" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Could not open uinput";
     return -1;
   }
   memset(&uinp, 0, sizeof(uinp));
@@ -310,12 +324,12 @@ int g13_create_uinput(g13_keypad *g13) {
 
   int retcode = write(ufile, &uinp, sizeof(uinp));
   if(retcode < 0) {
-    cerr << "Could not write to uinput device (" << retcode << ")" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Could not write to uinput device (" << retcode << ")";
     return -1;
   }
   retcode = ioctl(ufile, UI_DEV_CREATE);
   if(retcode) {
-    cerr << "Error creating uinput device for G13" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Error creating uinput device for G13";
     return -1;
   }
   return ufile;
@@ -372,7 +386,7 @@ int g13_read_keys(g13_keypad *g13) {
     errors[LIBUSB_ERROR_NO_MEM] = "LIBUSB_ERROR_NO_MEM";
     errors[LIBUSB_ERROR_NOT_SUPPORTED] = "LIBUSB_ERROR_NOT_SUPPORTED";
     errors[LIBUSB_ERROR_OTHER    ] = "LIBUSB_ERROR_OTHER    ";
-    cerr << "Error while reading keys: " << error << " (" << errors[error] << ")" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Error while reading keys: " << error << " (" << errors[error] << ")";
     //    cerr << "Stopping daemon" << endl;
     //    return -1;
   }
@@ -395,8 +409,8 @@ void g13_destroy_uinput(g13_keypad *g13) {
 libusb_context *ctx = null;
 vector<g13_keypad*> g13s;
 
-void cleanup(int n = 0) {
-  //  cout << "cleaning up" << endl;
+void cleanup() {
+  BOOST_LOG_TRIVIAL(info) << "cleanup called";
   for(int i = 0; i < g13s.size(); i++) {
     g13_destroy_uinput(g13s[i]);
     g13_destroy_fifo(g13s[i]);
@@ -422,20 +436,20 @@ void g13_read_commands(g13_keypad *g13) {
     unsigned char buf[1024*1024];
     memset(buf, 0, 1024*1024);
     ret = read(g13->fifo, buf, 1024*1024);
-    //    std::cout << "INFO: read " << ret << " characters" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "INFO: read " << ret << " characters";
     if(ret == 960) { // TODO probably image, for now, don't test, just assume image
       g13->image(buf, ret);
     } else {
       std::string buffer = reinterpret_cast<const char*>(buf);
       std::vector<std::string> lines;
       boost::split(lines, buffer, boost::is_any_of("\n\r"));
-      //      std::cout << "INFO: lines: " << lines.size() << std::endl;
+      BOOST_LOG_TRIVIAL(debug) << "INFO: lines: " << lines.size();
       BOOST_FOREACH(std::string const &cmd, lines) {
         std::vector<std::string> command;
         boost::split(command, cmd, boost::is_any_of("#"));
-        //        std::cout << "INFO: command [" << command.size() << "]: " << command[0] << " (" << command[0].size() << ")" << std::endl;
+        BOOST_LOG_TRIVIAL(debug) << "INFO: command [" << command.size() << "]: " << command[0] << " (" << command[0].size() << ")";
         if(command.size() > 0 && command[0] != std::string("")) {
-	  cout << "command: " << command[0] << endl;
+	  BOOST_LOG_TRIVIAL(info) << "command: " << command[0];
           g13->command(command[0].c_str());
 	}
       }
@@ -585,65 +599,74 @@ void init_keynames() {
 }
 void display_keys() {
   typedef std::map<std::string,int> mapType;
-  std::cout << "Known keys on G13:" << std::endl;
+  BOOST_LOG_TRIVIAL(info) << "Known keys on G13:";
   BOOST_FOREACH(const mapType::value_type &item, name_to_key) {
-    std::cout << item.first << " ";
+    BOOST_LOG_TRIVIAL(info) << "   " << item.first;
   }
-  std::cout << "STICK_LEFT " << "STICK_RIGHT " << "STICK_UP " << "STICK_DOWN ";
-  std::cout << std::endl;
-  std::cout << "Known keys to map to:" << std::endl;
-  BOOST_FOREACH(const mapType::value_type &item, input_name_to_key) {
-    std::cout << item.first << " ";
-  }
-  std::cout << std::endl;
 
+  BOOST_LOG_TRIVIAL(info) << "STICK_LEFT " << "STICK_RIGHT " << "STICK_UP " << "STICK_DOWN";
+
+  BOOST_LOG_TRIVIAL(info) << "Known keys to map to:";
+  BOOST_FOREACH(const mapType::value_type &item, input_name_to_key) {
+    BOOST_LOG_TRIVIAL(info) << "   " << item.first;
+  }
 }
+
 int main(int argc, char *argv[]) {
+  std::unique_ptr<g13logging> logger(new g13logging(argc, argv));
+
   init_keynames();
   display_keys();
   g13_count = 0;
   string filename;
-  if(argc == 2) {
+  if(argc >= 2) {
     filename = argv[1];
-    cout << "Setting logo: " << filename << endl;
+    BOOST_LOG_TRIVIAL(info) << "Setting logo: " << filename;
   }
   libusb_device **devs;
   ssize_t cnt;
   int ret;
   ret = libusb_init(&ctx);
   if(ret < 0) {
-    cout << "Initialization error: " << ret << endl;
+    BOOST_LOG_TRIVIAL(error) << "Initialization error: " << ret;
     return 1;
   }
   libusb_set_debug(ctx, 3);
   cnt = libusb_get_device_list(ctx, &devs);
   if(cnt < 0) {
-    cout << "Error while getting device list" << endl;
+    BOOST_LOG_TRIVIAL(error) << "Error while getting device list";
     return 1;
   }
   discover_g13s(devs, cnt, g13s);
   libusb_free_device_list(devs, 1);
-  cout << "Found " << g13s.size() << " G13s" << endl;
+  BOOST_LOG_TRIVIAL(info) << "Found " << g13s.size() << " G13s";
   if(g13s.size() == 0) {
+    BOOST_LOG_TRIVIAL(error) << "No G13 found - exiting";
     return 1;
   }
   for(int i = 0; i < g13s.size(); i++) {
     register_g13(ctx, g13s[i]);
   }
   signal(SIGINT, set_stop);
-  if(g13s.size() > 0 && argc == 2) {
+  if(g13s.size() > 0 && argc >= 2) {
     g13_write_lcd_file(ctx, g13s[0], filename);
   }
+
+  BOOST_LOG_TRIVIAL(info) << "Entering event loop";
   do {
-    if(g13s.size() > 0)
-      for(int i = 0; i < g13s.size(); i++) {
-        int status = g13_read_keys(g13s[i]);
-        g13_read_commands(g13s[i]);
-        if(status < 0)
-          running = false;
-      }
+    for(int i = 0; i < g13s.size(); i++) {
+      int status = g13_read_keys(g13s[i]);
+      g13_read_commands(g13s[i]);
+      if(status < 0)
+	running = false;
+    }
   } while(running);
+
+  BOOST_LOG_TRIVIAL(info) << "Cleaning up";
   cleanup();
+
+  BOOST_LOG_TRIVIAL(info) << "Exiting";
+  return 0;
 }
 
 void g13_keypad::image(unsigned char *data, int size) {
@@ -691,13 +714,13 @@ void g13_keypad::command(char const *str) {
         } else if(key_name == "STICK_DOWN") {
           this->stick_keys[STICK_DOWN] = bind;
         } else {
-          cerr << "unknown g13 key: " << keyname << endl;
+          BOOST_LOG_TRIVIAL(error) << "unknown g13 key: " << keyname;
         }
       } else {
-        cerr << "unknown key: " << binding << endl;
+        BOOST_LOG_TRIVIAL(error) << "unknown key: " << binding;
       }
 
     } else {
-      cerr << "unknown command: <" << str << ">" <<  endl;
+      BOOST_LOG_TRIVIAL(error) << "unknown command: <" << str << ">";
     }
   }
