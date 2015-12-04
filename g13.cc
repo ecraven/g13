@@ -252,7 +252,11 @@ void g13_write_lcd(libusb_context *ctx, libusb_device_handle *handle, unsigned c
     cerr << "Error when transfering image: " << error << ", " << bytes_written << " bytes written" << endl;
 }
 int g13_create_fifo(g13_keypad *g13) {
+
+  // mkfifo(g13->fifo_name(), 0777); - didn't work
   mkfifo(g13->fifo_name(), 0666);
+  chmod( g13->fifo_name(), 0777 );
+
   return open(g13->fifo_name(), O_RDWR | O_NONBLOCK);
 }
 int g13_create_uinput(g13_keypad *g13) {
