@@ -353,7 +353,7 @@ void g13_write_lcd_file(libusb_context *ctx, g13_keypad *g13, string filename) {
 int g13_read_keys(g13_keypad *g13) {
   unsigned char buffer[G13_REPORT_SIZE];
   int size;
-  int error = libusb_interrupt_transfer(g13->handle, LIBUSB_ENDPOINT_IN | G13_KEY_ENDPOINT, buffer, G13_REPORT_SIZE, &size, 1000);
+  int error = libusb_interrupt_transfer(g13->handle, LIBUSB_ENDPOINT_IN | G13_KEY_ENDPOINT, buffer, G13_REPORT_SIZE, &size, 100);
   if(error && error != LIBUSB_ERROR_TIMEOUT) {
     std::map<int,std::string> errors;
     errors[LIBUSB_SUCCESS] = "LIBUSB_SUCCESS";
