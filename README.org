@@ -49,5 +49,36 @@ You can bind the stick keys by binding the keynames STICK_LEFT, STICK_RIGHT, STI
 Use pbm2lpbm to convert a pbm image to the correct format, then just cat that into the pipe (cat starcraft2.lpbm > /tmp/g13-0).
 The pbm file must be 160x43 pixels.
 
+*** pos <row> <col>
+
+Sets the current text position to <row> <col>
+
+*** out <text>
+
+Writes <text> to the LCD at the current text position
+
+*** clear
+
+Clears the LCD
+
+*** textmode <mode>
+
+Sets the text mode to <mode>, current options are 0 (normal) or 1 (inverted)
+
+*** refresh
+
+Resends the LCD buffer
+
+*** profile <profile_name>
+    
+Selects <profile_name> to be the current profile, creating it if it doesn't exist.
+
+All key binding changes (from the bind command) are made on the current profile.
+ 
+ 
+*** font <font_name>   
+
+Switch font, current options are 8x8 and 5x8    
+
 * License
 This code is placed in the public domain. Do with it whatever you want.
