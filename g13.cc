@@ -4,6 +4,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/preprocessor/seq.hpp>
+#include <boost/preprocessor/cat.hpp>
 #include <iomanip>
 #include <sys/stat.h>
 #include "logo.h"
@@ -19,6 +21,8 @@
 
 using namespace std;
 
+namespace G13 {
+
 
 int g13_count;
 
@@ -26,41 +30,38 @@ void g13_set_key_color(libusb_device_handle *handle, int red, int green, int blu
 void g13_set_mode_leds(libusb_device_handle *handle, int leds);
 
 
+#define G13_KEY_SEQ															\
+	/* byte 3 */	(G1)(G2)(G3)(G4)(G5)(G6)(G7)(G8)						\
+	/* byte 4 */	(G9)(G10)(G11)(G12)(G13)(G14)(G15)(G16)					\
+	/* byte 5 */	(G17)(G18)(G19)(G20)(G21)(G22)(UNDEF1)(LIGHT_STATE)		\
+	/* byte 6 */	(BD)(L1)(L2)(L3)(L4)(M1)(M2)(M3)						\
+	/* byte 7 */	(MR)(LEFT)(DOWN)(TOP)(UNDEF3)(LIGHT)(LIGHT2)(MISC_TOGGLE)
 
-uint64_t inline _BV(uint64_t x) { return (1UL << x); }
-#define G13_KEY_ONLY_MASK  (_BV(G13_G1)  | \
-                            _BV(G13_G2)  | \
-                            _BV(G13_G3)  | \
-                            _BV(G13_G4)  | \
-                            _BV(G13_G5)  | \
-                            _BV(G13_G6)  | \
-                            _BV(G13_G7)  | \
-                            _BV(G13_G8)  | \
-                            _BV(G13_G9)  | \
-                            _BV(G13_G10) | \
-                            _BV(G13_G11) | \
-                            _BV(G13_G12) | \
-                            _BV(G13_G13) | \
-                            _BV(G13_G14) | \
-                            _BV(G13_G15) | \
-                            _BV(G13_G16) | \
-                            _BV(G13_G17) | \
-                            _BV(G13_G18) | \
-                            _BV(G13_G19) | \
-                            _BV(G13_G20) | \
-                            _BV(G13_G21) | \
-                            _BV(G13_G22) | \
-                            _BV(G13_BD)  | \
-                            _BV(G13_L1)  | \
-                            _BV(G13_L2)  | \
-                            _BV(G13_L3)  | \
-                            _BV(G13_L4)  | \
-                            _BV(G13_M1)  | \
-                            _BV(G13_M2)  | \
-                            _BV(G13_M3)  | \
-                            _BV(G13_MR)  | \
-                            _BV(G13_LIGHT))
+#define G13_NONPARSED_KEY_SEQ												\
+		(UNDEF1)(LIGHT_STATE)(UNDEF3)(LIGHT)(LIGHT2)(UNDEF3)(MISC_TOGGLE)	\
 
+void G13_Profile::_init_keys() {
+	int key_index = 0;
+
+#define INIT_KEY( r, data, elem )											\
+		{																	\
+			G13_Key key( *this, BOOST_PP_STRINGIZE(elem), key_index++ );	\
+			_keys.push_back( key );											\
+		}																	\
+
+	BOOST_PP_SEQ_FOR_EACH( INIT_KEY, _, G13_KEY_SEQ )
+
+	assert( _keys.size() == G13_NUM_KEYS );
+
+#define MARK_NON_PARSED_KEY( r, data, elem )								\
+		{																	\
+			G13_Key *key = find_key( BOOST_PP_STRINGIZE(elem) );			\
+			assert(key);													\
+			key->_should_parse = false;										\
+		}																	\
+
+	BOOST_PP_SEQ_FOR_EACH( MARK_NON_PARSED_KEY, _, G13_NONPARSED_KEY_SEQ )
+}
 
 static inline int g13_key_pressed(uint64_t code, int key_enum) {
     return (code & (1UL << key_enum)) ? 1 : 0;
@@ -96,7 +97,7 @@ void send_event(int file, int type, int code, int val) {
   struct input_event event;
 
   memset(&event, 0, sizeof(event));
-  gettimeofday(&event.time, null);
+  gettimeofday(&event.time, G13_NULL);
   event.type = type;
   event.code = code;
   event.value = val;
@@ -146,7 +147,30 @@ void g13_parse_key(int key, unsigned char *byte, g13_keypad *g13) {
     send_event(g13->uinput_file, EV_KEY, g13->mapping(key), g13->is_set(key));
   }
 }
+
+void G13_Key::parse_key( unsigned char *byte, g13_keypad *g13) {
+	if( _should_parse ) {
+		unsigned char actual_byte = byte[_index.offset];
+		if(bool value = g13->update(_index.index, actual_byte & _index.mask)) {
+			send_event(g13->uinput_file, EV_KEY, g13->mapping(_index.index), g13->is_set(_index.index));
+		}
+	}
+}
+
+
+void G13_Profile::parse_keys( unsigned char *buf ) {
+	buf += 3;
+	for( size_t i = 0; i < _keys.size(); i++ ) {
+		_keys[i].parse_key( buf, &_keypad );
+	}
+}
+
+
 void g13_parse_keys(unsigned char *buf, g13_keypad *g13) {
+
+#if 1
+	g13->current_profile->parse_keys(buf);
+#else
   g13_parse_key(G13_KEY_G1, buf+3, g13);
   g13_parse_key(G13_KEY_G2, buf+3, g13);
   g13_parse_key(G13_KEY_G3, buf+3, g13);
@@ -193,10 +217,11 @@ void g13_parse_keys(unsigned char *buf, g13_keypad *g13) {
   cout << hex << setw(2) << setfill('0') << (int)buf[5];
   cout << hex << setw(2) << setfill('0') << (int)buf[4];
   cout << hex << setw(2) << setfill('0') << (int)buf[3] << endl;*/
+#endif
 }
 
 void g13_init_lcd(libusb_device_handle *handle) {
-  int error = libusb_control_transfer(handle, 0, 9, 1, 0, null, 0, 1000);
+  int error = libusb_control_transfer(handle, 0, 9, 1, 0, G13_NULL, 0, 1000);
   if(error) {
     cerr << "Error when initialising lcd endpoint" << endl;
   }
@@ -206,7 +231,7 @@ void g13_deregister(g13_keypad *g13) {
   libusb_close(g13->handle);
 }
 
-void discover_g13s(libusb_device **devs, ssize_t count, vector<g13_keypad*>& g13s) {
+void G13_Manager::discover_g13s(libusb_device **devs, ssize_t count, vector<g13_keypad*>& g13s) {
   for(int i = 0; i < count; i++) {
     libusb_device_descriptor desc;
     int r = libusb_get_device_descriptor(devs[i], &desc);
@@ -229,7 +254,7 @@ void discover_g13s(libusb_device **devs, ssize_t count, vector<g13_keypad*>& g13
         cerr << "Cannot Claim Interface" << endl;
         return;
       }
-      g13s.push_back(new g13_keypad(handle, g13_count++));
+      g13s.push_back(new g13_keypad(*this, handle, g13_count++));
     }
   }
 }
@@ -390,11 +415,10 @@ void g13_destroy_uinput(g13_keypad *g13) {
 }
 
 
-libusb_context *ctx = null;
-vector<g13_keypad*> g13s;
 
-void cleanup(int n = 0) {
-  //  cout << "cleaning up" << endl;
+
+void G13_Manager::cleanup(int n ) {
+  cout << "cleaning up" << endl;
   for(int i = 0; i < g13s.size(); i++) {
     g13_destroy_uinput(g13s[i]);
     g13_destroy_fifo(g13s[i]);
@@ -421,7 +445,7 @@ void g13_read_commands(g13_keypad *g13) {
     ret = read(g13->fifo, buf, 1024*1024);
     //    std::cout << "INFO: read " << ret << " characters" << std::endl;
     if(ret == 960) { // TODO probably image, for now, don't test, just assume image
-      g13->image(buf, ret);
+      g13->lcd().image(buf, ret);
     } else {
       std::string buffer = reinterpret_cast<const char*>(buf);
       std::vector<std::string> lines;
@@ -438,149 +462,64 @@ void g13_read_commands(g13_keypad *g13) {
       }
     }
   }}
-std::map<int,std::string> key_to_name;
-std::map<std::string,int> name_to_key;
-std::map<int,std::string> input_key_to_name;
-std::map<std::string,int> input_name_to_key;
-void init_keynames() {
-#define g13k(symbol,name) { key_to_name[symbol] = name; name_to_key[name] = symbol; }
-#define inpk(symbol) { input_key_to_name[symbol] = #symbol; input_name_to_key[#symbol] = symbol; }
-  g13k(G13_KEY_G1,"G1");
-  g13k(G13_KEY_G2,"G2");
-  g13k(G13_KEY_G3,"G3");
-  g13k(G13_KEY_G4,"G4");
-  g13k(G13_KEY_G5,"G5");
-  g13k(G13_KEY_G6,"G6");
-  g13k(G13_KEY_G7,"G7");
-  g13k(G13_KEY_G8,"G8");
-  g13k(G13_KEY_G9,"G9");
-  g13k(G13_KEY_G10,"G10");
-  g13k(G13_KEY_G11,"G11");
-  g13k(G13_KEY_G12,"G12");
-  g13k(G13_KEY_G13,"G13");
-  g13k(G13_KEY_G14,"G14");
-  g13k(G13_KEY_G15,"G15");
-  g13k(G13_KEY_G16,"G16");
-  g13k(G13_KEY_G17,"G17");
-  g13k(G13_KEY_G18,"G18");
-  g13k(G13_KEY_G19,"G19");
-  g13k(G13_KEY_G20,"G20");
-  g13k(G13_KEY_G21,"G21");
-  g13k(G13_KEY_G22,"G22");
-  g13k(G13_KEY_LIGHT_STATE,"LIGHT_STATE");
-  g13k(G13_KEY_BD,"BD");
-  g13k(G13_KEY_L1,"L1");
-  g13k(G13_KEY_L2,"L2");
-  g13k(G13_KEY_L3,"L3");
-  g13k(G13_KEY_L4,"L4");
-  g13k(G13_KEY_M1,"M1");
-  g13k(G13_KEY_M2,"M2");
-  g13k(G13_KEY_M3,"M3");
-  g13k(G13_KEY_MR,"MR");
-  g13k(G13_KEY_LEFT,"LEFT");
-  g13k(G13_KEY_DOWN,"DOWN");
-  g13k(G13_KEY_TOP,"TOP");
-  g13k(G13_KEY_LIGHT,"LIGHT");
-  inpk(KEY_ESC);
-  inpk(KEY_1);
-  inpk(KEY_2);
-  inpk(KEY_3);
-  inpk(KEY_4);
-  inpk(KEY_5);
-  inpk(KEY_6);
-  inpk(KEY_7);
-  inpk(KEY_8);
-  inpk(KEY_9);
-  inpk(KEY_0);
-  inpk(KEY_MINUS);
-  inpk(KEY_EQUAL);
-  inpk(KEY_BACKSPACE);
-  inpk(KEY_TAB);
-  inpk(KEY_Q);
-  inpk(KEY_W);
-  inpk(KEY_E);
-  inpk(KEY_R);
-  inpk(KEY_T);
-  inpk(KEY_Y);
-  inpk(KEY_U);
-  inpk(KEY_I);
-  inpk(KEY_O);
-  inpk(KEY_P);
-  inpk(KEY_LEFTBRACE);
-  inpk(KEY_RIGHTBRACE);
-  inpk(KEY_ENTER);
-  inpk(KEY_LEFTCTRL);
-  inpk(KEY_RIGHTCTRL);
-  inpk(KEY_A);
-  inpk(KEY_S);
-  inpk(KEY_D);
-  inpk(KEY_F);
-  inpk(KEY_G);
-  inpk(KEY_H);
-  inpk(KEY_J);
-  inpk(KEY_K);
-  inpk(KEY_L);
-  inpk(KEY_SEMICOLON);
-  inpk(KEY_APOSTROPHE);
-  inpk(KEY_GRAVE);
-  inpk(KEY_LEFTSHIFT);
-  inpk(KEY_BACKSLASH);
-  inpk(KEY_Z);
-  inpk(KEY_X);
-  inpk(KEY_C);
-  inpk(KEY_V);
-  inpk(KEY_B);
-  inpk(KEY_N);
-  inpk(KEY_M);
-  inpk(KEY_COMMA);
-  inpk(KEY_DOT);
-  inpk(KEY_SLASH);
-  inpk(KEY_RIGHTSHIFT);
-  inpk(KEY_KPASTERISK);
-  inpk(KEY_LEFTALT);
-  inpk(KEY_RIGHTALT);
-  inpk(KEY_SPACE);
-  inpk(KEY_CAPSLOCK);
-  inpk(KEY_F1);
-  inpk(KEY_F2);
-  inpk(KEY_F3);
-  inpk(KEY_F4);
-  inpk(KEY_F5);
-  inpk(KEY_F6);
-  inpk(KEY_F7);
-  inpk(KEY_F8);
-  inpk(KEY_F9);
-  inpk(KEY_F10);
-  inpk(KEY_F11);
-  inpk(KEY_F12);
-  inpk(KEY_NUMLOCK);
-  inpk(KEY_SCROLLLOCK);
-  inpk(KEY_KP7);
-  inpk(KEY_KP8);
-  inpk(KEY_KP9);
-  inpk(KEY_KPMINUS);
-  inpk(KEY_KP4);
-  inpk(KEY_KP5);
-  inpk(KEY_KP6);
-  inpk(KEY_KPPLUS);
-  inpk(KEY_KP1);
-  inpk(KEY_KP2);
-  inpk(KEY_KP3);
-  inpk(KEY_KP0);
-  inpk(KEY_KPDOT);
-  inpk(KEY_LEFT);
-  inpk(KEY_RIGHT);
-  inpk(KEY_UP);
-  inpk(KEY_DOWN);
-  inpk(KEY_PAGEUP);
-  inpk(KEY_PAGEDOWN);
-  inpk(KEY_HOME);
-  inpk(KEY_END);
-  inpk(KEY_INSERT);
-  inpk(KEY_DELETE);
 
+G13_Key * G13_Profile::find_key( const std::string &keyname ) {
+
+  if(_keypad._manager.name_to_key.find(keyname) != _keypad._manager.name_to_key.end()) {
+    int key = _keypad._manager.name_to_key[keyname];
+    if( key >= 0 && key < _keys.size() ) {
+    	return &_keys[key];
+    }
+  }
+  return 0;
 }
-void display_keys() {
+
+
+void G13_Manager::init_keynames() {
+
+	int key_index = 0;
+
+	#define ADD_G13_KEY_MAPPING( r, data, elem )							\
+		{																	\
+			std::string name = BOOST_PP_STRINGIZE(elem);					\
+			key_to_name[key_index] = name; 									\
+			name_to_key[name] = key_index;									\
+			key_index++;													\
+		}																	\
+
+	BOOST_PP_SEQ_FOR_EACH( ADD_G13_KEY_MAPPING, _, G13_KEY_SEQ )
+
+#define KB_INPUT_KEY_SEQ													\
+		(ESC)(1)(2)(3)(4)(5)(6)(7)(8)(9)(0)									\
+		(MINUS)(EQUAL)(BACKSPACE)(TAB)										\
+		(Q)(W)(E)(R)(T)(Y)(U)(I)(O)(P)										\
+		(LEFTBRACE)(RIGHTBRACE)(ENTER)(LEFTCTRL)(RIGHTCTRL)					\
+		(A)(S)(D)(F)(G)(H)(J)(K)(L)											\
+		(SEMICOLON)(APOSTROPHE)(GRAVE)(LEFTSHIFT)(BACKSLASH)				\
+		(Z)(X)(C)(V)(B)(N)(M)												\
+		(COMMA)(DOT)(SLASH)(RIGHTSHIFT)(KPASTERISK)							\
+		(LEFTALT)(RIGHTALT)(SPACE)(CAPSLOCK)								\
+		(F1)(F2)(F3)(F4)(F5)(F6)(F7)(F8)(F9)(F10)(F11)(F12)					\
+		(NUMLOCK)(SCROLLLOCK)												\
+		(KP7)(KP8)(KP9)(KPMINUS)(KP4)(KP5)(KP6)(KPPLUS)						\
+		(KP1)(KP2)(KP3)(KP0)(KPDOT)											\
+		(LEFT)(RIGHT)(UP)(DOWN)												\
+		(PAGEUP)(PAGEDOWN)(HOME)(END)(INSERT)(DELETE)						\
+
+
+#define ADD_KB_KEY_MAPPING( r, data, elem )									\
+	{																		\
+		std::string name = "KEY_" BOOST_PP_STRINGIZE(elem);					\
+		int keyval = BOOST_PP_CAT( KEY_, elem );							\
+		input_key_to_name[keyval] = name; 									\
+		input_name_to_key[name] = keyval;									\
+	}																		\
+
+
+	BOOST_PP_SEQ_FOR_EACH( ADD_KB_KEY_MAPPING, _, KB_INPUT_KEY_SEQ )
+}
+
+void G13_Manager::display_keys() {
   typedef std::map<std::string,int> mapType;
   std::cout << "Known keys on G13:" << std::endl;
   BOOST_FOREACH(const mapType::value_type &item, name_to_key) {
@@ -595,61 +534,15 @@ void display_keys() {
   std::cout << std::endl;
 
 }
-int main(int argc, char *argv[]) {
-  init_keynames();
-  display_keys();
-  g13_count = 0;
-  string filename;
-  if(argc == 2) {
-    filename = argv[1];
-    cout << "Setting logo: " << filename << endl;
-  }
-  libusb_device **devs;
-  ssize_t cnt;
-  int ret;
-  ret = libusb_init(&ctx);
-  if(ret < 0) {
-    cout << "Initialization error: " << ret << endl;
-    return 1;
-  }
-  libusb_set_debug(ctx, 3);
-  cnt = libusb_get_device_list(ctx, &devs);
-  if(cnt < 0) {
-    cout << "Error while getting device list" << endl;
-    return 1;
-  }
-  discover_g13s(devs, cnt, g13s);
-  libusb_free_device_list(devs, 1);
-  cout << "Found " << g13s.size() << " G13s" << endl;
-  if(g13s.size() == 0) {
-    return 1;
-  }
-  for(int i = 0; i < g13s.size(); i++) {
-    register_g13(ctx, g13s[i]);
-  }
-  signal(SIGINT, set_stop);
-  if(g13s.size() > 0 && argc == 2) {
-    g13_write_lcd_file(ctx, g13s[0], filename);
-  }
-  do {
-    if(g13s.size() > 0)
-      for(int i = 0; i < g13s.size(); i++) {
-        int status = g13_read_keys(g13s[i]);
-        g13_read_commands(g13s[i]);
-        if(status < 0)
-          running = false;
-      }
-  } while(running);
-  cleanup();
-}
 
-void g13_keypad::image(unsigned char *data, int size) {
-  g13_write_lcd(ctx, this->handle, data, size);
+void G13_LCD::image(unsigned char *data, int size) {
+  g13_write_lcd( _keypad._manager.ctx, _keypad.handle, data, size);
 }
 
 extern unsigned char font8x8_basic[128][8];
 
-g13_keypad::g13_keypad(libusb_device_handle *handle, int id) {
+g13_keypad::g13_keypad(G13_Manager &manager, libusb_device_handle *handle, int id) : _manager(manager), _lcd(*this)
+{
     this->handle = handle;
     this->id = id;
     this->stick_mode = STICK_KEYS;
@@ -658,10 +551,14 @@ g13_keypad::g13_keypad(libusb_device_handle *handle, int id) {
     this->stick_keys[STICK_UP] = KEY_UP;
     this->stick_keys[STICK_DOWN] = KEY_DOWN;
     uinput_file = -1;
+
+    current_profile = ProfilePtr( new G13_Profile(*this) );
+    _profiles["default"] = current_profile;
+
     for(int i = 0; i < sizeof(keys); i++)
       keys[i] = false;
-    for(int i = 0; i < G13_NUM_KEYS; i++)
-      map[i] = KEY_A;
+    //for(int i = 0; i < G13_NUM_KEYS; i++)
+    //  map[i] = KEY_A;
     /*      map = { KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H,
               KEY_I, KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P,
               KEY_Q, KEY_R, KEY_S, KEY_T, KEY_U, KEY_V, 0, 0,
@@ -675,14 +572,34 @@ g13_keypad::g13_keypad(libusb_device_handle *handle, int id) {
     //         KEY_F1, KEY_N, KEY_R, KEY_P, KEY_K, KEY_D, KEY_X, KEY_Y,
     // 	    KEY_Z, KEY_TAB, KEY_W, KEY_BACKSPACE, 0, 0, 0, 0};
 
-    image_clear();
-    cursor_col = 0;
-    cursor_row = 0;
-    text_mode = 0;
+    lcd().image_clear();
+
 
     #define CONTROL_DIR std::string("/tmp/")
     this->_fifo_name = CONTROL_DIR + "g13-" + boost::lexical_cast<std::string>(id);
     _init_fonts();
+}
+
+FontPtr g13_keypad::switch_to_font( const std::string &name ) {
+	  FontPtr rv = _fonts[name];
+	  if( rv ) {
+		  current_font = rv;
+	  }
+	  return rv;
+}
+
+void g13_keypad::switch_to_profile( const std::string &name ) {
+	current_profile = profile( name );
+
+}
+
+ProfilePtr g13_keypad::profile( const std::string &name ) {
+	  ProfilePtr rv = _profiles[name];
+	  if( !rv ) {
+		  rv = ProfilePtr( new G13_Profile( *current_profile) );
+		  _profiles[name] = rv;
+	  }
+	  return rv;
 }
 
 void g13_keypad::command(char const *str) {
@@ -696,11 +613,11 @@ void g13_keypad::command(char const *str) {
       g13_set_mode_leds(handle, mod);
     } else if(sscanf(str, "bind %255s %255s", keyname, binding) == 2) {
       std::string key_name(keyname);
-      if(input_name_to_key.find(binding) != input_name_to_key.end()) {
-        int bind = input_name_to_key[binding];
-        if(name_to_key.find(keyname) != name_to_key.end()) {
-          int key = name_to_key[keyname];
-          map[key] = bind;
+      if(_manager.input_name_to_key.find(binding) != _manager.input_name_to_key.end()) {
+        int bind = _manager.input_name_to_key[binding];
+        auto key = current_profile->find_key(keyname);
+        if(key) {
+          key->set_mapping(bind);
         } else if(key_name == "STICK_LEFT") {
           this->stick_keys[STICK_LEFT] = bind;
         } else if(key_name == "STICK_RIGHT") {
@@ -716,58 +633,70 @@ void g13_keypad::command(char const *str) {
         cerr << "unknown key: " << binding << endl;
       }
     } else if(sscanf(str, "image %i %i", &red, &green) == 2) {
-    	image_test(red,green);
+    	lcd().image_test(red,green);
     } else if(sscanf(str, "write_char %c %i %i", &c, &row, &col) == 3) {
-       	write_char( c, row, col );
+    	lcd().write_char( c, row, col );
     } else if(sscanf(str, "pos %i %i", &row, &col) == 2) {
-       	write_pos( row, col );
+    	lcd().write_pos( row, col );
     } else if(sscanf(str, "write_char %c", &c ) == 1) {
-       	write_char( c );
+    	lcd().write_char( c );
     } else if( !strncmp( str, "out ", 4 ) ) {
-    	write_string( str+4 );
+    	lcd().write_string( str+4 );
     } else if( !strncmp( str, "clear", 5 ) ) {
-    	image_clear();
-    	image_send();
+    	lcd().image_clear();
+    	lcd().image_send();
     } else if(sscanf(str, "mode %i", &mod ) == 1) {
-    	text_mode = mod;
+    	lcd().text_mode = mod;
     } else if( !strncmp( str, "refresh", 6 ) ) {
-    	image_send();
+    	lcd().image_send();
+    } else if(sscanf(str, "profile %255s", binding) == 1) {
+    	switch_to_profile( binding );
+    } else if(sscanf(str, "font %255s", binding) == 1) {
+    	switch_to_font( binding );
     } else {
       cerr << "unknown command: <" << str << ">" <<  endl;
     }
 }
 
 
-void g13_keypad::write_pos(int row, int col ) {
+G13_LCD::G13_LCD( g13_keypad &keypad ) : _keypad(keypad) {
+    cursor_col = 0;
+    cursor_row = 0;
+    text_mode = 0;
+}
+
+void G13_LCD::write_pos(int row, int col ) {
 	cursor_row = row;
 	cursor_col = col;
-	if( cursor_col >= G13_LCD_TEXT_COLUMNS ) {
+	if( cursor_col >= G13_LCD_COLUMNS ) {
 		cursor_col = 0;
 	}
 	if( cursor_row >= G13_LCD_TEXT_ROWS ) {
 		cursor_row = 0;
 	}
 }
-void g13_keypad::write_char( char c, int row, int col ) {
+void G13_LCD::write_char( char c, int row, int col ) {
 	if( row == -1 ) {
 		row = cursor_row;
 		col = cursor_col;
-		if( ++cursor_col >= G13_LCD_TEXT_COLUMNS ) {
+		cursor_col += _keypad.current_font->_width;
+		if( cursor_col >= G13_LCD_COLUMNS ) {
 			cursor_col = 0;
 			if( ++cursor_row >= G13_LCD_TEXT_ROWS ) {
 				cursor_row = 0;
 			}
 		}
 	}
-	unsigned offset = image_byte_offset( row*G13_LCD_TEXT_CHEIGHT, col*G13_LCD_TEXT_CWIDTH );
+
+	unsigned offset = image_byte_offset( row*G13_LCD_TEXT_CHEIGHT, col ); //*_keypad.current_font->_width );
 	if( text_mode ) {
-		memcpy( & image_buf[offset], &font_inverted[c], G13_LCD_TEXT_CWIDTH );
+		memcpy( & image_buf[offset], &_keypad.current_font->chars[c].bits_inverted, _keypad.current_font->_width );
 	} else {
-		memcpy( & image_buf[offset], &font_basic[c], G13_LCD_TEXT_CWIDTH );
+		memcpy( & image_buf[offset], &_keypad.current_font->chars[c].bits_regular, _keypad.current_font->_width );
 	}
 }
 
-void g13_keypad::write_string( const char *str ) {
+void G13_LCD::write_string( const char *str ) {
 	std::cout << "writing \"" << str << "\"" << std::endl;
 	while( *str ) {
 		if( *str == '\n' ) {
@@ -791,10 +720,7 @@ void g13_keypad::write_string( const char *str ) {
 	image_send();
 }
 
-void g13_keypad::image_test( int x, int y ) {
-
-
-
+void G13_LCD::image_test( int x, int y ) {
 
 	int row = 0, col = 0;
 	if( y >= 0 ) {
@@ -828,173 +754,71 @@ void g13_keypad::image_test( int x, int y ) {
 }
 
 
-// font data from https://github.com/dhepper/font8x8
-    // Constant: font8x8_basic
-    // Contains an 8x8 font map for unicode points U+0000 - U+007F (basic latin)
-    unsigned char font8x8_basic[128][8] = {
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0000 (nul)
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0001
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0002
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0003
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0004
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0005
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0006
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0007
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0008
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0009
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+000A
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+000B
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+000C
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+000D
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+000E
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+000F
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0010
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0011
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0012
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0013
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0014
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0015
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0016
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0017
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0018
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0019
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+001A
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+001B
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+001C
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+001D
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+001E
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+001F
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0020 (space)
-        { 0x18, 0x3C, 0x3C, 0x18, 0x18, 0x00, 0x18, 0x00},   // U+0021 (!)
-        { 0x36, 0x36, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0022 (")
-        { 0x36, 0x36, 0x7F, 0x36, 0x7F, 0x36, 0x36, 0x00},   // U+0023 (#)
-        { 0x0C, 0x3E, 0x03, 0x1E, 0x30, 0x1F, 0x0C, 0x00},   // U+0024 ($)
-        { 0x00, 0x63, 0x33, 0x18, 0x0C, 0x66, 0x63, 0x00},   // U+0025 (%)
-        { 0x1C, 0x36, 0x1C, 0x6E, 0x3B, 0x33, 0x6E, 0x00},   // U+0026 (&)
-        { 0x06, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0027 (')
-        { 0x18, 0x0C, 0x06, 0x06, 0x06, 0x0C, 0x18, 0x00},   // U+0028 (()
-        { 0x06, 0x0C, 0x18, 0x18, 0x18, 0x0C, 0x06, 0x00},   // U+0029 ())
-        { 0x00, 0x66, 0x3C, 0xFF, 0x3C, 0x66, 0x00, 0x00},   // U+002A (*)
-        { 0x00, 0x0C, 0x0C, 0x3F, 0x0C, 0x0C, 0x00, 0x00},   // U+002B (+)
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C, 0x06},   // U+002C (,)
-        { 0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x00},   // U+002D (-)
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C, 0x00},   // U+002E (.)
-        { 0x60, 0x30, 0x18, 0x0C, 0x06, 0x03, 0x01, 0x00},   // U+002F (/)
-        { 0x3E, 0x63, 0x73, 0x7B, 0x6F, 0x67, 0x3E, 0x00},   // U+0030 (0)
-        { 0x0C, 0x0E, 0x0C, 0x0C, 0x0C, 0x0C, 0x3F, 0x00},   // U+0031 (1)
-        { 0x1E, 0x33, 0x30, 0x1C, 0x06, 0x33, 0x3F, 0x00},   // U+0032 (2)
-        { 0x1E, 0x33, 0x30, 0x1C, 0x30, 0x33, 0x1E, 0x00},   // U+0033 (3)
-        { 0x38, 0x3C, 0x36, 0x33, 0x7F, 0x30, 0x78, 0x00},   // U+0034 (4)
-        { 0x3F, 0x03, 0x1F, 0x30, 0x30, 0x33, 0x1E, 0x00},   // U+0035 (5)
-        { 0x1C, 0x06, 0x03, 0x1F, 0x33, 0x33, 0x1E, 0x00},   // U+0036 (6)
-        { 0x3F, 0x33, 0x30, 0x18, 0x0C, 0x0C, 0x0C, 0x00},   // U+0037 (7)
-        { 0x1E, 0x33, 0x33, 0x1E, 0x33, 0x33, 0x1E, 0x00},   // U+0038 (8)
-        { 0x1E, 0x33, 0x33, 0x3E, 0x30, 0x18, 0x0E, 0x00},   // U+0039 (9)
-        { 0x00, 0x0C, 0x0C, 0x00, 0x00, 0x0C, 0x0C, 0x00},   // U+003A (:)
-        { 0x00, 0x0C, 0x0C, 0x00, 0x00, 0x0C, 0x0C, 0x06},   // U+003B (//)
-        { 0x18, 0x0C, 0x06, 0x03, 0x06, 0x0C, 0x18, 0x00},   // U+003C (<)
-        { 0x00, 0x00, 0x3F, 0x00, 0x00, 0x3F, 0x00, 0x00},   // U+003D (=)
-        { 0x06, 0x0C, 0x18, 0x30, 0x18, 0x0C, 0x06, 0x00},   // U+003E (>)
-        { 0x1E, 0x33, 0x30, 0x18, 0x0C, 0x00, 0x0C, 0x00},   // U+003F (?)
-        { 0x3E, 0x63, 0x7B, 0x7B, 0x7B, 0x03, 0x1E, 0x00},   // U+0040 (@)
-        { 0x0C, 0x1E, 0x33, 0x33, 0x3F, 0x33, 0x33, 0x00},   // U+0041 (A)
-        { 0x3F, 0x66, 0x66, 0x3E, 0x66, 0x66, 0x3F, 0x00},   // U+0042 (B)
-        { 0x3C, 0x66, 0x03, 0x03, 0x03, 0x66, 0x3C, 0x00},   // U+0043 (C)
-        { 0x1F, 0x36, 0x66, 0x66, 0x66, 0x36, 0x1F, 0x00},   // U+0044 (D)
-        { 0x7F, 0x46, 0x16, 0x1E, 0x16, 0x46, 0x7F, 0x00},   // U+0045 (E)
-        { 0x7F, 0x46, 0x16, 0x1E, 0x16, 0x06, 0x0F, 0x00},   // U+0046 (F)
-        { 0x3C, 0x66, 0x03, 0x03, 0x73, 0x66, 0x7C, 0x00},   // U+0047 (G)
-        { 0x33, 0x33, 0x33, 0x3F, 0x33, 0x33, 0x33, 0x00},   // U+0048 (H)
-        { 0x1E, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x1E, 0x00},   // U+0049 (I)
-        { 0x78, 0x30, 0x30, 0x30, 0x33, 0x33, 0x1E, 0x00},   // U+004A (J)
-        { 0x67, 0x66, 0x36, 0x1E, 0x36, 0x66, 0x67, 0x00},   // U+004B (K)
-        { 0x0F, 0x06, 0x06, 0x06, 0x46, 0x66, 0x7F, 0x00},   // U+004C (L)
-        { 0x63, 0x77, 0x7F, 0x7F, 0x6B, 0x63, 0x63, 0x00},   // U+004D (M)
-        { 0x63, 0x67, 0x6F, 0x7B, 0x73, 0x63, 0x63, 0x00},   // U+004E (N)
-        { 0x1C, 0x36, 0x63, 0x63, 0x63, 0x36, 0x1C, 0x00},   // U+004F (O)
-        { 0x3F, 0x66, 0x66, 0x3E, 0x06, 0x06, 0x0F, 0x00},   // U+0050 (P)
-        { 0x1E, 0x33, 0x33, 0x33, 0x3B, 0x1E, 0x38, 0x00},   // U+0051 (Q)
-        { 0x3F, 0x66, 0x66, 0x3E, 0x36, 0x66, 0x67, 0x00},   // U+0052 (R)
-        { 0x1E, 0x33, 0x07, 0x0E, 0x38, 0x33, 0x1E, 0x00},   // U+0053 (S)
-        { 0x3F, 0x2D, 0x0C, 0x0C, 0x0C, 0x0C, 0x1E, 0x00},   // U+0054 (T)
-        { 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x3F, 0x00},   // U+0055 (U)
-        { 0x33, 0x33, 0x33, 0x33, 0x33, 0x1E, 0x0C, 0x00},   // U+0056 (V)
-        { 0x63, 0x63, 0x63, 0x6B, 0x7F, 0x77, 0x63, 0x00},   // U+0057 (W)
-        { 0x63, 0x63, 0x36, 0x1C, 0x1C, 0x36, 0x63, 0x00},   // U+0058 (X)
-        { 0x33, 0x33, 0x33, 0x1E, 0x0C, 0x0C, 0x1E, 0x00},   // U+0059 (Y)
-        { 0x7F, 0x63, 0x31, 0x18, 0x4C, 0x66, 0x7F, 0x00},   // U+005A (Z)
-        { 0x1E, 0x06, 0x06, 0x06, 0x06, 0x06, 0x1E, 0x00},   // U+005B ([)
-        { 0x03, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x40, 0x00},   // U+005C (\)
-        { 0x1E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x1E, 0x00},   // U+005D (])
-        { 0x08, 0x1C, 0x36, 0x63, 0x00, 0x00, 0x00, 0x00},   // U+005E (^)
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF},   // U+005F (_)
-        { 0x0C, 0x0C, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0060 (`)
-        { 0x00, 0x00, 0x1E, 0x30, 0x3E, 0x33, 0x6E, 0x00},   // U+0061 (a)
-        { 0x07, 0x06, 0x06, 0x3E, 0x66, 0x66, 0x3B, 0x00},   // U+0062 (b)
-        { 0x00, 0x00, 0x1E, 0x33, 0x03, 0x33, 0x1E, 0x00},   // U+0063 (c)
-        { 0x38, 0x30, 0x30, 0x3e, 0x33, 0x33, 0x6E, 0x00},   // U+0064 (d)
-        { 0x00, 0x00, 0x1E, 0x33, 0x3f, 0x03, 0x1E, 0x00},   // U+0065 (e)
-        { 0x1C, 0x36, 0x06, 0x0f, 0x06, 0x06, 0x0F, 0x00},   // U+0066 (f)
-        { 0x00, 0x00, 0x6E, 0x33, 0x33, 0x3E, 0x30, 0x1F},   // U+0067 (g)
-        { 0x07, 0x06, 0x36, 0x6E, 0x66, 0x66, 0x67, 0x00},   // U+0068 (h)
-        { 0x0C, 0x00, 0x0E, 0x0C, 0x0C, 0x0C, 0x1E, 0x00},   // U+0069 (i)
-        { 0x30, 0x00, 0x30, 0x30, 0x30, 0x33, 0x33, 0x1E},   // U+006A (j)
-        { 0x07, 0x06, 0x66, 0x36, 0x1E, 0x36, 0x67, 0x00},   // U+006B (k)
-        { 0x0E, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x1E, 0x00},   // U+006C (l)
-        { 0x00, 0x00, 0x33, 0x7F, 0x7F, 0x6B, 0x63, 0x00},   // U+006D (m)
-        { 0x00, 0x00, 0x1F, 0x33, 0x33, 0x33, 0x33, 0x00},   // U+006E (n)
-        { 0x00, 0x00, 0x1E, 0x33, 0x33, 0x33, 0x1E, 0x00},   // U+006F (o)
-        { 0x00, 0x00, 0x3B, 0x66, 0x66, 0x3E, 0x06, 0x0F},   // U+0070 (p)
-        { 0x00, 0x00, 0x6E, 0x33, 0x33, 0x3E, 0x30, 0x78},   // U+0071 (q)
-        { 0x00, 0x00, 0x3B, 0x6E, 0x66, 0x06, 0x0F, 0x00},   // U+0072 (r)
-        { 0x00, 0x00, 0x3E, 0x03, 0x1E, 0x30, 0x1F, 0x00},   // U+0073 (s)
-        { 0x08, 0x0C, 0x3E, 0x0C, 0x0C, 0x2C, 0x18, 0x00},   // U+0074 (t)
-        { 0x00, 0x00, 0x33, 0x33, 0x33, 0x33, 0x6E, 0x00},   // U+0075 (u)
-        { 0x00, 0x00, 0x33, 0x33, 0x33, 0x1E, 0x0C, 0x00},   // U+0076 (v)
-        { 0x00, 0x00, 0x63, 0x6B, 0x7F, 0x7F, 0x36, 0x00},   // U+0077 (w)
-        { 0x00, 0x00, 0x63, 0x36, 0x1C, 0x36, 0x63, 0x00},   // U+0078 (x)
-        { 0x00, 0x00, 0x33, 0x33, 0x33, 0x3E, 0x30, 0x1F},   // U+0079 (y)
-        { 0x00, 0x00, 0x3F, 0x19, 0x0C, 0x26, 0x3F, 0x00},   // U+007A (z)
-        { 0x38, 0x0C, 0x0C, 0x07, 0x0C, 0x0C, 0x38, 0x00},   // U+007B ({)
-        { 0x18, 0x18, 0x18, 0x00, 0x18, 0x18, 0x18, 0x00},   // U+007C (|)
-        { 0x07, 0x0C, 0x0C, 0x38, 0x0C, 0x0C, 0x07, 0x00},   // U+007D (})
-        { 0x6E, 0x3B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+007E (~)
-        { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}    // U+007F
-    };
-
-void g13_keypad::_init_fonts() {
-    for( int i = 0; i < 128; i++ ) {
-    	memset( &font_basic[i], 0, 8 );
-    	for( int x = 0; x < 8; x++ ) {
-    		unsigned char x_mask = 1 << x;
-    		for( int y = 0;  y < 8; y++ ) {
-    			unsigned char y_mask = 1 << y;
-    			if( font8x8_basic[i][y] & x_mask ) {
-    				font_basic[i][x] |= 1 << y;
-    			}
-    		}
-    	}
-    	if( G13_LCD_TEXT_CWIDTH == 5 ) {
-    		if( font_basic[i][0] ) {
-    			font_basic[i][0] = font_basic[i][0] | font_basic[i][1];
-				font_basic[i][1] = font_basic[i][2] | font_basic[i][3];
-				font_basic[i][2] = font_basic[i][4]; // font_basic[i][4];
-				font_basic[i][3] = font_basic[i][5] | font_basic[i][6];
-				font_basic[i][4] = font_basic[i][7]; // | font_basic[i][7];
-    		} else {
-    			// font_basic[i][0] = font_basic[i][0] | font_basic[i][1];
-				font_basic[i][1] = font_basic[i][1] | font_basic[i][2];
-				font_basic[i][2] = font_basic[i][3]; // font_basic[i][4];
-				font_basic[i][3] = font_basic[i][4] | font_basic[i][5];
-				font_basic[i][4] = font_basic[i][6] | font_basic[i][7];
-
-    		}
-    	}
-
-    	for( int x = 0; x < 8; x++ ) {
-    		font_inverted[i][x] = ~font_basic[i][x];
-    	}
-    }
-
+G13_Manager::G13_Manager() :
+	ctx(0)
+{
 }
 
+int G13_Manager::run() {
+
+  init_keynames();
+  display_keys();
+  g13_count = 0;
+  //string filename;
+
+
+  ssize_t cnt;
+  int ret;
+
+  ret = libusb_init(&ctx);
+  if(ret < 0) {
+    cout << "Initialization error: " << ret << endl;
+    return 1;
+  }
+
+  libusb_set_debug(ctx, 3);
+  cnt = libusb_get_device_list(ctx, &devs);
+  if(cnt < 0) {
+    cout << "Error while getting device list" << endl;
+    return 1;
+  }
+
+  discover_g13s(devs, cnt, g13s);
+  libusb_free_device_list(devs, 1);
+  cout << "Found " << g13s.size() << " G13s" << endl;
+  if(g13s.size() == 0) {
+    return 1;
+  }
+  for(int i = 0; i < g13s.size(); i++) {
+    register_g13(ctx, g13s[i]);
+  }
+  signal(SIGINT, set_stop);
+  if(g13s.size() > 0 && logo_filename.size()) {
+    g13_write_lcd_file(ctx, g13s[0], logo_filename);
+  }
+  do {
+    if(g13s.size() > 0)
+      for(int i = 0; i < g13s.size(); i++) {
+        int status = g13_read_keys(g13s[i]);
+        g13_read_commands(g13s[i]);
+        if(status < 0)
+          running = false;
+      }
+  } while(running);
+  cleanup();
+}
+} // namespace G13
+
+using namespace G13;
+
+
+int main(int argc, char *argv[]) {
+
+	G13_Manager manager;
+	if(argc == 2) {
+		cout << "Setting logo: " << argv[1] << endl;
+		manager.set_logo( argv[1] );
+	}
+
+	manager.run();
+};
