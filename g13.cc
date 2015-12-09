@@ -63,12 +63,14 @@ void G13_Profile::_init_keys() {
 	BOOST_PP_SEQ_FOR_EACH( MARK_NON_PARSED_KEY, _, G13_NONPARSED_KEY_SEQ )
 }
 
+#if 0
 static inline int g13_key_pressed(uint64_t code, int key_enum) {
     return (code & (1UL << key_enum)) ? 1 : 0;
 }
 
 void discover_g13s(libusb_device **devs, ssize_t count, vector<libusb_device_handle*>& g13s);
 
+#endif
 
 void g13_set_mode_leds(libusb_device_handle *handle, int leds) {
   unsigned char usb_data[] = { 5, 0, 0, 0, 0 };
@@ -139,24 +141,26 @@ void g13_parse_joystick(unsigned char *buf, g13_keypad *g13) {
           send_event(g13->uinput_file, EV_REL, REL_Y, stick_y/16 - 8);*/
   }
 }
-void g13_parse_key(int key, unsigned char *byte, g13_keypad *g13) {
-  unsigned char actual_byte = byte[key / 8];
-  unsigned char mask = 1 << (key % 8);
-  if(bool value = g13->update(key, actual_byte & mask)) {
-//    cout << g13->mapping(key) << ": " << g13->is_set(key) << endl;
-    send_event(g13->uinput_file, EV_KEY, g13->mapping(key), g13->is_set(key));
-  }
+
+void G13_Key::set_mapping( int key ) {
+	_mapped_key = key;
 }
 
 void G13_Key::parse_key( unsigned char *byte, g13_keypad *g13) {
 	if( _should_parse ) {
 		unsigned char actual_byte = byte[_index.offset];
 		if(bool value = g13->update(_index.index, actual_byte & _index.mask)) {
-			send_event(g13->uinput_file, EV_KEY, g13->mapping(_index.index), g13->is_set(_index.index));
+			bool is_down = g13->is_set(_index.index);
+
+			if( _action ) {
+				_action->act( *g13,  is_down );
+			} else {
+				//send_event( g13->uinput_file, EV_KEY, g13->mapping(_index.index), is_down );
+				send_event( g13->uinput_file, EV_KEY, mapped_key(), is_down );
+			}
 		}
 	}
 }
-
 
 void G13_Profile::parse_keys( unsigned char *buf ) {
 	buf += 3;
@@ -165,59 +169,9 @@ void G13_Profile::parse_keys( unsigned char *buf ) {
 	}
 }
 
-
 void g13_parse_keys(unsigned char *buf, g13_keypad *g13) {
 
-#if 1
 	g13->current_profile->parse_keys(buf);
-#else
-  g13_parse_key(G13_KEY_G1, buf+3, g13);
-  g13_parse_key(G13_KEY_G2, buf+3, g13);
-  g13_parse_key(G13_KEY_G3, buf+3, g13);
-  g13_parse_key(G13_KEY_G4, buf+3, g13);
-  g13_parse_key(G13_KEY_G5, buf+3, g13);
-  g13_parse_key(G13_KEY_G6, buf+3, g13);
-  g13_parse_key(G13_KEY_G7, buf+3, g13);
-  g13_parse_key(G13_KEY_G8, buf+3, g13);
-
-  g13_parse_key(G13_KEY_G9, buf+3, g13);
-  g13_parse_key(G13_KEY_G10, buf+3, g13);
-  g13_parse_key(G13_KEY_G11, buf+3, g13);
-  g13_parse_key(G13_KEY_G12, buf+3, g13);
-  g13_parse_key(G13_KEY_G13, buf+3, g13);
-  g13_parse_key(G13_KEY_G14, buf+3, g13);
-  g13_parse_key(G13_KEY_G15, buf+3, g13);
-  g13_parse_key(G13_KEY_G16, buf+3, g13);
-
-  g13_parse_key(G13_KEY_G17, buf+3, g13);
-  g13_parse_key(G13_KEY_G18, buf+3, g13);
-  g13_parse_key(G13_KEY_G19, buf+3, g13);
-  g13_parse_key(G13_KEY_G20, buf+3, g13);
-  g13_parse_key(G13_KEY_G21, buf+3, g13);
-  g13_parse_key(G13_KEY_G22, buf+3, g13);
-  //  g13_parse_key(G13_KEY_LIGHT_STATE, buf+3, g13);
-
-  g13_parse_key(G13_KEY_BD, buf+3, g13);
-  g13_parse_key(G13_KEY_L1, buf+3, g13);
-  g13_parse_key(G13_KEY_L2, buf+3, g13);
-  g13_parse_key(G13_KEY_L3, buf+3, g13);
-  g13_parse_key(G13_KEY_L4, buf+3, g13);
-  g13_parse_key(G13_KEY_M1, buf+3, g13);
-  g13_parse_key(G13_KEY_M2, buf+3, g13);
-
-  g13_parse_key(G13_KEY_M3, buf+3, g13);
-  g13_parse_key(G13_KEY_MR, buf+3, g13);
-  g13_parse_key(G13_KEY_LEFT, buf+3, g13);
-  g13_parse_key(G13_KEY_DOWN, buf+3, g13);
-  g13_parse_key(G13_KEY_TOP, buf+3, g13);
-  g13_parse_key(G13_KEY_LIGHT, buf+3, g13);
-  //  g13_parse_key(G13_KEY_LIGHT2, buf+3, file);
-  /*  cout << hex << setw(2) << setfill('0') << (int)buf[7];
-  cout << hex << setw(2) << setfill('0') << (int)buf[6];
-  cout << hex << setw(2) << setfill('0') << (int)buf[5];
-  cout << hex << setw(2) << setfill('0') << (int)buf[4];
-  cout << hex << setw(2) << setfill('0') << (int)buf[3] << endl;*/
-#endif
 }
 
 void g13_init_lcd(libusb_device_handle *handle) {
@@ -602,6 +556,38 @@ ProfilePtr g13_keypad::profile( const std::string &name ) {
 	  return rv;
 }
 
+G13_Action::~G13_Action() {}
+
+G13_Action_Keys::G13_Action_Keys( g13_keypad & keypad, const std::string &keys_string ) : G13_Action(keypad )
+{
+    std::vector<std::string> keys;
+    boost::split(keys, keys_string, boost::is_any_of("+"));
+    BOOST_FOREACH(std::string const &key, keys) {
+        if(keypad._manager.input_name_to_key.find(key) == keypad._manager.input_name_to_key.end()) {
+        	throw G13_CommandException( "unknown key : " + key );
+        }
+        _keys.push_back( keypad._manager.input_name_to_key[key] );
+    }
+	std::vector<int> _keys;
+}
+
+G13_Action_Keys::~G13_Action_Keys() {}
+
+void G13_Action_Keys::act( g13_keypad &g13, bool is_down ) {
+	if( is_down ) {
+		for( int i = 0; i < _keys.size(); i++ ) {
+			send_event( g13.uinput_file, EV_KEY, _keys[i], is_down );
+		}
+	} else {
+		for( int i = _keys.size() - 1; i >= 0; i-- ) {
+			send_event( g13.uinput_file, EV_KEY, _keys[i], is_down );
+		}
+
+	}
+}
+
+
+
 void g13_keypad::command(char const *str) {
     int red, green, blue, mod, row, col;;
     char keyname[256];
@@ -611,6 +597,16 @@ void g13_keypad::command(char const *str) {
       g13_set_key_color(handle, red, green, blue);
     } else if(sscanf(str, "mod %i", &mod) == 1) {
       g13_set_mode_leds(handle, mod);
+    } else if(sscanf(str, "mbind %255s %255s", keyname, binding) == 2) {
+        auto key = current_profile->find_key(keyname);
+        if(key) {
+        	try {
+        		key->_action = G13_ActionPtr( new G13_Action_Keys( *this, binding ) );
+        	}
+        	catch( const std::exception &ex ) {
+        		cerr << "mbind " << keyname << " " << binding << " failed : " << ex.what() <<  endl;
+        	}
+        }
     } else if(sscanf(str, "bind %255s %255s", keyname, binding) == 2) {
       std::string key_name(keyname);
       if(_manager.input_name_to_key.find(binding) != _manager.input_name_to_key.end()) {
@@ -645,7 +641,7 @@ void g13_keypad::command(char const *str) {
     } else if( !strncmp( str, "clear", 5 ) ) {
     	lcd().image_clear();
     	lcd().image_send();
-    } else if(sscanf(str, "mode %i", &mod ) == 1) {
+    } else if(sscanf(str, "textmode %i", &mod ) == 1) {
     	lcd().text_mode = mod;
     } else if( !strncmp( str, "refresh", 6 ) ) {
     	lcd().image_send();

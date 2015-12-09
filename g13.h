@@ -34,6 +34,32 @@ class G13_Profile;
 class g13_keypad;
 class G13_Manager;
 
+class G13_Action {
+public:
+	G13_Action( g13_keypad & keypad ) : _keypad(keypad) {}
+	virtual ~G13_Action();
+
+	virtual void act( g13_keypad &, bool is_down ) = 0;
+
+	g13_keypad & keypad() { return _keypad; }
+	const g13_keypad & keypad() const { return _keypad; }
+
+private:
+	g13_keypad & _keypad;
+};
+
+class G13_Action_Keys : public G13_Action {
+public:
+	G13_Action_Keys( g13_keypad & keypad, const std::string &keys );
+	virtual ~G13_Action_Keys();
+
+	virtual void act( g13_keypad &, bool is_down );
+
+	std::vector<int> _keys;
+};
+
+typedef boost::shared_ptr<G13_Action> G13_ActionPtr;
+
 class G13_Key {
 public:
 
@@ -43,9 +69,12 @@ public:
 	int 			index() const { return _index.index; }
 	int 			mapped_key() const { return _mapped_key; }
 
-	void 			set_mapping( int key ) { _mapped_key = key; }
+	void 			set_mapping( int key );
+
 
 	void parse_key( unsigned char *byte, g13_keypad *g13);
+
+	G13_ActionPtr _action;
 
 private:
 	struct KeyIndex {
@@ -223,6 +252,15 @@ public:
   void write_string( const char *str );
   void write_pos(int row, int col );
 
+};
+
+class G13_CommandException : public std::exception {
+public:
+	G13_CommandException( const std::string &reason ) : _reason(reason) {}
+	virtual ~G13_CommandException() throw () {}
+	virtual const char *what() const throw () { return _reason.c_str(); }
+
+	std::string _reason;
 };
 
 
