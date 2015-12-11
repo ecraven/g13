@@ -6,8 +6,11 @@ g13.o: g13.h g13.cc
 g13_fonts.o: g13.h g13_fonts.cc
 	g++ -std=c++0x -c g13_fonts.cc
 
-g13d: g13.o g13_fonts.o
-	g++ -o g13d -std=c++0x g13.o g13_fonts.o -lusb-1.0
+g13_lcd.o: g13.h g13_lcd.cc
+	g++ -std=c++0x -c g13_lcd.cc
+	
+g13d: g13.o g13_fonts.o g13_lcd.o
+	g++ -o g13d -std=c++0x g13.o g13_fonts.o g13_lcd.o -lusb-1.0
 
 pbm2lpbm: pbm2lpbm.c
 	g++ -o pbm2lpbm pbm2lpbm.c

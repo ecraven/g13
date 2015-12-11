@@ -425,7 +425,7 @@ void G13_Font::install_font( ARRAY_T &data, FLAGST flags, int first ) {
 		chars[i+first].set_character( &data[i][0], _width, flags );
 	}
 }
-void g13_keypad::_init_fonts() {
+void G13_KeyPad::_init_fonts() {
 
 	current_font = FontPtr( new G13_Font("8x8",8) );
 	_fonts[current_font->_name] = current_font;

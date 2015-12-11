@@ -1,6 +1,28 @@
+#ifndef __G13_H__
+#define __G13_H__
+
+#include <libusb-1.0/libusb.h>
+#include <iostream>
+#include <vector>
+#include <boost/lexical_cast.hpp>
+#include <boost/foreach.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/preprocessor/seq.hpp>
+#include <boost/preprocessor/cat.hpp>
+#include <boost/shared_ptr.hpp>
+#include <iomanip>
+#include <sys/stat.h>
+
+#include <string.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string>
+#include <fstream>
+#include <linux/uinput.h>
+#include <fcntl.h>
 #include <string>
 #include <map>
-#include <boost/shared_ptr.hpp>
 
 #define G13_NULL 0
 
@@ -31,29 +53,29 @@ const size_t G13_LCD_TEXT_COLUMNS = 160 / G13_LCD_TEXT_CWIDTH;
 const size_t G13_LCD_TEXT_ROWS = 160 / G13_LCD_TEXT_CHEIGHT;
 
 class G13_Profile;
-class g13_keypad;
+class G13_KeyPad;
 class G13_Manager;
 
 class G13_Action {
 public:
-	G13_Action( g13_keypad & keypad ) : _keypad(keypad) {}
+	G13_Action( G13_KeyPad & keypad ) : _keypad(keypad) {}
 	virtual ~G13_Action();
 
-	virtual void act( g13_keypad &, bool is_down ) = 0;
+	virtual void act( G13_KeyPad &, bool is_down ) = 0;
 
-	g13_keypad & keypad() { return _keypad; }
-	const g13_keypad & keypad() const { return _keypad; }
+	G13_KeyPad & keypad() { return _keypad; }
+	const G13_KeyPad & keypad() const { return _keypad; }
 
 private:
-	g13_keypad & _keypad;
+	G13_KeyPad & _keypad;
 };
 
 class G13_Action_Keys : public G13_Action {
 public:
-	G13_Action_Keys( g13_keypad & keypad, const std::string &keys );
+	G13_Action_Keys( G13_KeyPad & keypad, const std::string &keys );
 	virtual ~G13_Action_Keys();
 
-	virtual void act( g13_keypad &, bool is_down );
+	virtual void act( G13_KeyPad &, bool is_down );
 
 	std::vector<int> _keys;
 };
@@ -72,7 +94,7 @@ public:
 	void 			set_mapping( int key );
 
 
-	void parse_key( unsigned char *byte, g13_keypad *g13);
+	void parse_key( unsigned char *byte, G13_KeyPad *g13);
 
 	G13_ActionPtr _action;
 
@@ -122,7 +144,7 @@ private:
  */
 class G13_Profile {
 public:
-	G13_Profile(g13_keypad &keypad) : _keypad(keypad) {
+	G13_Profile(G13_KeyPad &keypad) : _keypad(keypad) {
 		_init_keys();
 	}
 
@@ -136,7 +158,7 @@ public:
 
 	void parse_keys( unsigned char *buf );
 
-	g13_keypad &_keypad;
+	G13_KeyPad &_keypad;
 	std::vector<G13_Key> _keys;
 
 protected:
@@ -198,9 +220,9 @@ public:
 	// 00.40 01.40 02.40 ...
 	// 00.80 01.80 02.80 ...
 	// A0.01 A1.01 A2.01 ...
-	G13_LCD( g13_keypad &keypad );
+	G13_LCD( G13_KeyPad &keypad );
 
-	g13_keypad &_keypad;
+	G13_KeyPad &_keypad;
 	unsigned char image_buf[G13_LCD_BUF_SIZE+8];
 	unsigned cursor_row;
 	unsigned cursor_col;
@@ -264,7 +286,44 @@ public:
 };
 
 
-struct g13_keypad {
+struct G13_KeyPad {
+
+  G13_KeyPad(G13_Manager &manager, libusb_device_handle *handle, int id);
+
+
+  void init_lcd();
+  void write_lcd(libusb_context *ctx, unsigned char *data, size_t size);
+
+  void write_lcd_file(libusb_context *ctx, const std::string &filename);
+
+  FontPtr switch_to_font( const std::string &name );
+  void switch_to_profile( const std::string &name );
+  ProfilePtr profile( const std::string &name );
+
+  // int mapping(int key) { return current_profile->mapping(key); }
+
+  void command(char const *str);
+  void read_commands();
+  int read_keys();
+  void parse_joystick(unsigned char *buf);
+
+  G13_LCD &lcd() { return _lcd; }
+
+
+
+  const char *fifo_name() { return _fifo_name.c_str(); }
+
+  void _init_fonts();
+
+
+  void set_key_color( int red, int green, int blue );
+  void set_mode_leds( int leds );
+
+
+  void register_context(libusb_context *ctx);
+
+  void cleanup();
+
   libusb_device_handle *handle;
   int uinput_file;
   int id;
@@ -276,44 +335,29 @@ struct g13_keypad {
 
   std::map<std::string,FontPtr> _fonts;
   FontPtr current_font;
-  FontPtr switch_to_font( const std::string &name );
-
   std::map<std::string,ProfilePtr> _profiles;
   ProfilePtr current_profile;
 
-  g13_keypad(G13_Manager &manager, libusb_device_handle *handle, int id);
+
+
   // int map[G13_NUM_KEYS];
   G13_Manager &_manager;
   G13_LCD _lcd;
 
-  G13_LCD &lcd() { return _lcd; }
 
-
-  void switch_to_profile( const std::string &name );
-  ProfilePtr profile( const std::string &name );
-
-  int mapping(int key) {
-	return current_profile->mapping(key);
-  }
 
   bool keys[G13_NUM_KEYS];
-  bool is_set(int key) {
-    return keys[key];
-  }
+  bool is_set(int key) { return keys[key]; }
   bool update(int key, bool v) {
     bool old = keys[key];
     keys[key] = v;
     return old != v;
   }
-
-  void command(char const *str);
-
-  const char *fifo_name() {
-    return _fifo_name.c_str();
-  }
-
-  void _init_fonts();
 };
+
+/*!
+ * top level class, holds what would otherwise be in global variables
+ */
 
 class G13_Manager {
 public:
@@ -321,8 +365,8 @@ public:
 
 	void init_keynames();
 	void display_keys();
-	void discover_g13s(libusb_device **devs, ssize_t count, std::vector<g13_keypad*>& g13s);
-	void cleanup(int n = 0);
+	void discover_g13s(libusb_device **devs, ssize_t count, std::vector<G13_KeyPad*>& g13s);
+	void cleanup();
 
 	int run();
 	void set_logo( const std::string &fn ) { logo_filename = fn; }
@@ -331,7 +375,7 @@ public:
 	libusb_device **devs;
 
 	libusb_context *ctx;
-	std::vector<g13_keypad*> g13s;
+	std::vector<G13_KeyPad*> g13s;
 
 	std::map<int,std::string> key_to_name;
 	std::map<std::string,int> name_to_key;
@@ -339,64 +383,7 @@ public:
 	std::map<std::string,int> input_name_to_key;
 };
 
-enum G13_KEYS {
-    /* byte 3 */
-    G13_KEY_G1 = 0,
-    G13_KEY_G2,
-    G13_KEY_G3,
-    G13_KEY_G4,
-
-    G13_KEY_G5,
-    G13_KEY_G6,
-    G13_KEY_G7,
-    G13_KEY_G8,
-
-    /* byte 4 */
-    G13_KEY_G9,
-    G13_KEY_G10,
-    G13_KEY_G11,
-    G13_KEY_G12,
-
-    G13_KEY_G13,
-    G13_KEY_G14,
-    G13_KEY_G15,
-    G13_KEY_G16,
-
-    /* byte 5 */
-    G13_KEY_G17,
-    G13_KEY_G18,
-    G13_KEY_G19,
-    G13_KEY_G20,
-
-    G13_KEY_G21,
-    G13_KEY_G22,
-    G13_KEY_UNDEF1,
-    G13_KEY_LIGHT_STATE,
-
-    /* byte 6 */
-    G13_KEY_BD,
-    G13_KEY_L1,
-    G13_KEY_L2,
-    G13_KEY_L3,
-
-    G13_KEY_L4,
-    G13_KEY_M1,
-    G13_KEY_M2,
-    G13_KEY_M3,
-
-    /* byte 7 */
-    G13_KEY_MR,
-    G13_KEY_LEFT,
-    G13_KEY_DOWN,
-    G13_KEY_TOP,
-
-    G13_KEY_UNDEF3,
-    G13_KEY_LIGHT,
-    G13_KEY_LIGHT2,
-    G13_KEY_MISC_TOGGLE
-};
-
-void register_g13(libusb_context *ctx, g13_keypad *dev);
 
 } // namespace G13
 
+#endif // __G13_H__
