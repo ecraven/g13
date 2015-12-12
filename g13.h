@@ -38,7 +38,7 @@ namespace G13 {
 #define G13_LCD_BUFFER_SIZE 0x3c0
 #define G13_NUM_KEYS 40
 
-enum stick_mode_t { STICK_ABSOLUTE, /*STICK_RELATIVE,*/ STICK_KEYS };
+enum stick_mode_t { STICK_ABSOLUTE, STICK_RELATIVE, STICK_KEYS, STICK_CALCENTER, STICK_CALBOUNDS, STICK_CALNORTH };
 enum stick_key_t { STICK_LEFT, STICK_UP, STICK_DOWN, STICK_RIGHT };
 
 const size_t G13_LCD_COLUMNS = 160;
@@ -63,6 +63,8 @@ public:
 
 	virtual void act( G13_KeyPad &, bool is_down ) = 0;
 
+	void act( bool is_down ) { act( keypad(), is_down ); }
+
 	G13_KeyPad & keypad() { return _keypad; }
 	const G13_KeyPad & keypad() const { return _keypad; }
 
@@ -78,6 +80,16 @@ public:
 	virtual void act( G13_KeyPad &, bool is_down );
 
 	std::vector<int> _keys;
+};
+
+class G13_Action_PipeOut : public G13_Action {
+public:
+	G13_Action_PipeOut( G13_KeyPad & keypad, const std::string &out );
+	virtual ~G13_Action_PipeOut();
+
+	virtual void act( G13_KeyPad &, bool is_down );
+
+	std::string _out;
 };
 
 typedef boost::shared_ptr<G13_Action> G13_ActionPtr;
@@ -285,6 +297,86 @@ public:
 	std::string _reason;
 };
 
+class G13_Stick;
+template <class T>
+class Coord {
+public:
+	Coord() : x(), y() {}
+	Coord( T _x, T _y ) : x(_x), y(_y) {}
+	T x;
+	T y;
+
+};
+
+template <class T>
+class Bounds {
+public:
+	typedef Coord<T> CT;
+	Bounds( const CT &_tl, const CT &_br) : tl(_tl), br(_br) {}
+	Bounds( T x1, T y1, T x2, T y2 ) : tl(x1,y1), br(x2,y2) {}
+
+	bool contains( const CT &pos ) const {
+		return tl.x <= pos.x && tl.y <= pos.y &&  pos.x <= br.x && pos.y <= br.y;
+	}
+	CT tl;
+	CT br;
+};
+
+typedef Coord<int> G13_StickCoord;
+typedef Bounds<int> G13_StickBounds;
+typedef Coord<double> G13_ZoneCoord;
+typedef Bounds<double> G13_ZoneBounds;
+
+class G13_StickZone {
+public:
+
+	const std::string &name() const { return _name; }
+
+	//G13_Profile & 	mode() const { return _mode; }
+
+	void 			set_mapping( int key );
+
+	void parse_key( unsigned char *byte, G13_KeyPad *g13);
+
+	void test( const G13_ZoneCoord &loc );
+	bool _active;
+
+	G13_ActionPtr _action;
+	std::string _name;
+
+	G13_ZoneBounds _bounds;
+
+	G13_StickZone( const std::string &name,  const G13_ZoneBounds &, G13_ActionPtr = 0 );
+
+
+};
+
+typedef boost::shared_ptr< G13_StickZone> G13_StickZonePtr;
+
+
+class G13_Stick {
+public:
+	G13_Stick( G13_KeyPad &keypad );
+
+	void parse_joystick(unsigned char *buf);
+
+	void set_mode( stick_mode_t );
+	G13_StickZone *zone( const std::string &);
+	void _recalc_calibrated();
+
+	G13_KeyPad &_keypad;
+	std::vector<G13_StickZone> _zones;
+
+	G13_StickCoord _min_pos;
+	G13_StickCoord _center_pos;
+	G13_StickCoord _max_pos;
+	G13_StickCoord _north_pos;
+
+	G13_StickCoord _current_pos;
+	int stick_keys[4];
+	stick_mode_t _stick_mode;
+
+};
 
 struct G13_KeyPad {
 
@@ -307,6 +399,8 @@ struct G13_KeyPad {
   int read_keys();
   void parse_joystick(unsigned char *buf);
 
+  G13_ActionPtr make_action( const std::string & );
+
   G13_LCD &lcd() { return _lcd; }
 
 
@@ -328,8 +422,8 @@ struct G13_KeyPad {
   int uinput_file;
   int id;
   int fifo;
-  stick_mode_t stick_mode;
-  int stick_keys[4];
+  int fifo_out;
+
 
   std::string _fifo_name;
 
@@ -343,7 +437,7 @@ struct G13_KeyPad {
   // int map[G13_NUM_KEYS];
   G13_Manager &_manager;
   G13_LCD _lcd;
-
+  G13_Stick _stick;
 
 
   bool keys[G13_NUM_KEYS];

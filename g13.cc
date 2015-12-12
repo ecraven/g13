@@ -79,43 +79,144 @@ void G13_KeyPad::set_key_color( int red, int green, int blue) {
   }
 }
 
-
 void G13_KeyPad::parse_joystick(unsigned char *buf ) {
-	G13_KeyPad *g13 = this;
-  int stick_x = buf[1];
-  int stick_y = buf[2];
-  int key_left = g13->stick_keys[STICK_LEFT];
-  int key_right = g13->stick_keys[STICK_RIGHT];
-  int key_up = g13->stick_keys[STICK_UP];
-  int key_down = g13->stick_keys[STICK_DOWN];
-  if(g13->stick_mode == STICK_ABSOLUTE) {
-    send_event(g13->uinput_file, EV_ABS, ABS_X, stick_x);
-    send_event(g13->uinput_file, EV_ABS, ABS_Y, stick_y);
-  } else if(g13->stick_mode == STICK_KEYS) {
-    if(stick_x < 255/6) {
-      send_event(g13->uinput_file, EV_KEY, key_left, 1);
-      send_event(g13->uinput_file, EV_KEY, key_right, 0);
-    } else if(stick_x > 255/6*5) {
-      send_event(g13->uinput_file, EV_KEY, key_left, 0);
-      send_event(g13->uinput_file, EV_KEY, key_right, 1);
-    } else {
-      send_event(g13->uinput_file, EV_KEY, key_left, 0);
-      send_event(g13->uinput_file, EV_KEY, key_right, 0);
-    }
-    if(stick_y < 255/6) {
-      send_event(g13->uinput_file, EV_KEY, key_up, 1);
-      send_event(g13->uinput_file, EV_KEY, key_down, 0);
-    } else if(stick_y > 255/6*5) {
-      send_event(g13->uinput_file, EV_KEY, key_up, 0);
-      send_event(g13->uinput_file, EV_KEY, key_down, 1);
-    } else {
-      send_event(g13->uinput_file, EV_KEY, key_up, 0);
-      send_event(g13->uinput_file, EV_KEY, key_down, 0);
-    }
-  } else {
-    /*    send_event(g13->uinput_file, EV_REL, REL_X, stick_x/16 - 8);
-          send_event(g13->uinput_file, EV_REL, REL_Y, stick_y/16 - 8);*/
-  }
+	_stick.parse_joystick(buf);
+}
+
+G13_Stick::G13_Stick( G13_KeyPad &keypad ) :
+		_keypad(keypad),
+		_min_pos(0,0),
+		_center_pos(127,127),
+		_max_pos(255,255),
+		_north_pos( 127, 0 )
+{
+    _stick_mode = STICK_KEYS;
+    stick_keys[STICK_LEFT] = KEY_LEFT;
+    stick_keys[STICK_RIGHT] = KEY_RIGHT;
+    stick_keys[STICK_UP] = KEY_UP;
+    stick_keys[STICK_DOWN] = KEY_DOWN;
+
+    _zones.push_back( G13_StickZone( "STICK_UP", G13_ZoneBounds( 0.0, 0.1, 1.0, 0.3 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_UP") ) ) );
+    _zones.push_back( G13_StickZone( "STICK_DOWN", G13_ZoneBounds( 0.0, 0.7, 1.0, 0.9 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_DOWN") ) ) );
+    _zones.push_back( G13_StickZone( "STICK_LEFT", G13_ZoneBounds( 0.0, 0.0, 0.2, 1.0 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_LEFT") ) ) );
+    _zones.push_back( G13_StickZone( "STICK_RIGHT", G13_ZoneBounds( 0.8, 0.0, 1.0, 1.0 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_RIGHT") ) ) );
+
+    _zones.push_back( G13_StickZone( "STICK_UP2", G13_ZoneBounds( 0.0, 0.0, 1.0, 0.1 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_PAGEUP") ) ) );
+    _zones.push_back( G13_StickZone( "STICK_DOWN2", G13_ZoneBounds( 0.0, 0.9, 1.0, 1.0 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_PAGEDOWN") ) ) );
+
+}
+
+G13_StickZone *G13_Stick::zone( const std::string &name ) {
+
+	BOOST_FOREACH( G13_StickZone &zone, _zones ) {
+		if( zone._name == name ) {
+			return &zone;
+		}
+	}
+	return 0;
+}
+
+void G13_Stick::set_mode( stick_mode_t  m ) {
+	if( m == _stick_mode )
+		return;
+	if( _stick_mode == STICK_CALCENTER || _stick_mode == STICK_CALBOUNDS || _stick_mode == STICK_CALNORTH ) {
+		_recalc_calibrated();
+	}
+	_stick_mode = m;
+	switch( _stick_mode ) {
+
+	}
+}
+
+void G13_Stick::_recalc_calibrated() {
+
+}
+void G13_StickZone::test( const G13_ZoneCoord &loc ) {
+	bool prior_active = _active;
+	_active = _bounds.contains( loc );
+	if( !_active ) {
+		if( prior_active ) {
+			// cout << "exit stick zone " << _name << std::endl;
+			_action->act( false );
+		}
+	} else {
+		// cout << "in stick zone " << _name << std::endl;
+		_action->act( true );
+	}
+}
+
+
+
+G13_StickZone::G13_StickZone( const std::string &name,  const G13_ZoneBounds &b, G13_ActionPtr action) :
+	_name(name), _bounds(b), _active(false), _action(action)
+{
+	;
+}
+
+void G13_Stick::parse_joystick(unsigned char *buf) {
+
+	_current_pos.x = buf[1];
+	_current_pos.y = buf[2];
+
+	switch (_stick_mode) {
+
+	case STICK_CALCENTER:
+		_center_pos = _current_pos;
+		return;
+
+	case STICK_CALNORTH:
+		_north_pos = _current_pos;
+		return;
+
+	case STICK_CALBOUNDS:
+
+#define BOUND_CHECK_XY( target, op, xy )								\
+	  if( _current_pos.xy op target.xy ) target.xy = _current_pos.xy;		\
+
+#define BOUND_CHECK( target, op ) 									\
+		BOUND_CHECK_XY( target, op, x )										\
+		BOUND_CHECK_XY( target, op, y )										\
+
+		BOUND_CHECK(_min_pos, <)
+		BOUND_CHECK(_max_pos, >)
+		return;
+
+	};
+
+	if (_stick_mode == STICK_ABSOLUTE) {
+		send_event(_keypad.uinput_file, EV_ABS, ABS_X, _current_pos.x);
+		send_event(_keypad.uinput_file, EV_ABS, ABS_Y, _current_pos.y);
+	} else if (_stick_mode == STICK_KEYS) {
+		double dx = 0.5;
+		if (_current_pos.x <= _center_pos.x) {
+			dx = _current_pos.x - _min_pos.x;
+			dx /= (_center_pos.x - _min_pos.x) * 2;
+		} else {
+			dx = _max_pos.x - _current_pos.x;
+			dx /= (_center_pos.x - _min_pos.x) * 2;
+			dx = 1.0 - dx;
+		}
+		double dy = 0.5;
+		if (_current_pos.y <= _center_pos.y) {
+			dy = _current_pos.y - _min_pos.y;
+			dy /= (_center_pos.y - _min_pos.y) * 2;
+		} else {
+			dy = _max_pos.y - _current_pos.y;
+			dy /= (_center_pos.y - _min_pos.y) * 2;
+			dy = 1.0 - dy;
+		}
+
+		// cerr << "x=" << _current_pos.x << " y=" << _current_pos.y << " dx=" << dx << " dy=" << dy << std::endl;
+		G13_ZoneCoord jpos(dx, dy);
+		BOOST_FOREACH( G13_StickZone &zone, _zones ) {
+			zone.test(jpos);
+		}
+		return;
+
+	} else {
+		/*    send_event(g13->uinput_file, EV_REL, REL_X, stick_x/16 - 8);
+		 send_event(g13->uinput_file, EV_REL, REL_Y, stick_y/16 - 8);*/
+	}
 }
 
 void G13_Key::set_mapping( int key ) {
@@ -174,14 +275,15 @@ void G13_Manager::discover_g13s(libusb_device **devs, ssize_t count, vector<G13_
   }
 }
 
-int g13_create_fifo(G13_KeyPad *g13) {
+int g13_create_fifo(const char *fifo_name) {
 
   // mkfifo(g13->fifo_name(), 0777); - didn't work
-  mkfifo(g13->fifo_name(), 0666);
-  chmod( g13->fifo_name(), 0777 );
+  mkfifo(fifo_name, 0666);
+  chmod( fifo_name, 0777 );
 
-  return open(g13->fifo_name(), O_RDWR | O_NONBLOCK);
+  return open(fifo_name, O_RDWR | O_NONBLOCK);
 }
+
 int g13_create_uinput(G13_KeyPad *g13) {
   struct uinput_user_dev uinp;
   struct input_event event;
@@ -253,7 +355,11 @@ void G13_KeyPad::register_context( libusb_context *ctx) {
   set_key_color(red, green, blue);
   g13->write_lcd(ctx, g13_logo, sizeof(g13_logo));
   g13->uinput_file = g13_create_uinput(g13);
-  g13->fifo = g13_create_fifo(g13);
+  g13->fifo = g13_create_fifo(fifo_name());
+  std::string out_name(fifo_name());
+  out_name += "_out";
+  g13->fifo_out = g13_create_fifo(out_name.c_str());
+
   if( g13->fifo == -1 ) {
 	  cerr << "failed opening pipe" << endl;
 
@@ -419,15 +525,17 @@ void G13_Manager::display_keys() {
 
 }
 
-G13_KeyPad::G13_KeyPad(G13_Manager &manager, libusb_device_handle *handle, int id) : _manager(manager), _lcd(*this)
+G13_KeyPad::G13_KeyPad(G13_Manager &manager, libusb_device_handle *handle, int id) : _manager(manager), _lcd(*this), _stick(*this)
 {
     this->handle = handle;
     this->id = id;
+#if 0
     this->stick_mode = STICK_KEYS;
     this->stick_keys[STICK_LEFT] = KEY_LEFT;
     this->stick_keys[STICK_RIGHT] = KEY_RIGHT;
     this->stick_keys[STICK_UP] = KEY_UP;
     this->stick_keys[STICK_DOWN] = KEY_DOWN;
+#endif
     uinput_file = -1;
 
     current_profile = ProfilePtr( new G13_Profile(*this) );
@@ -510,6 +618,27 @@ void G13_Action_Keys::act( G13_KeyPad &g13, bool is_down ) {
 	}
 }
 
+G13_Action_PipeOut::G13_Action_PipeOut( G13_KeyPad & keypad, const std::string &out ) : G13_Action(keypad ),
+		_out(out+"\n")
+{}
+G13_Action_PipeOut::~G13_Action_PipeOut() {}
+
+void G13_Action_PipeOut::act( G13_KeyPad &kp, bool is_down ) {
+	if( is_down ) {
+		write( kp.fifo_out, _out.c_str(), _out.size() );
+	}
+}
+
+G13_ActionPtr G13_KeyPad::make_action( const std::string &action ) {
+	if( action[0] == '>' ) {
+		return G13_ActionPtr( new G13_Action_PipeOut( *this,&action[1] ) );
+	} else {
+		return G13_ActionPtr( new G13_Action_Keys( *this, action ) );
+	}
+	throw G13_CommandException( "can't create action for " + action );
+}
+
+
 void G13_KeyPad::command(char const *str) {
     int red, green, blue, mod, row, col;;
     char keyname[256];
@@ -520,15 +649,19 @@ void G13_KeyPad::command(char const *str) {
     } else if(sscanf(str, "mod %i", &mod) == 1) {
       set_mode_leds( mod);
     } else if(sscanf(str, "mbind %255s %255s", keyname, binding) == 2) {
-        auto key = current_profile->find_key(keyname);
-        if(key) {
-        	try {
-        		key->_action = G13_ActionPtr( new G13_Action_Keys( *this, binding ) );
-        	}
-        	catch( const std::exception &ex ) {
-        		cerr << "mbind " << keyname << " " << binding << " failed : " << ex.what() <<  endl;
-        	}
-        }
+    	try {
+			auto key = current_profile->find_key(keyname);
+			if(key) {
+				key->_action = make_action( binding );
+			} else if( auto stick_key = _stick.zone( keyname ) ) {
+				stick_key->_action = make_action( binding );
+			} else {
+				cerr << "mbind " << keyname << " unknown" <<  endl;
+			}
+    	}
+    	catch( const std::exception &ex ) {
+    		cerr << "mbind " << keyname << " " << binding << " failed : " << ex.what() <<  endl;
+    	}
     } else if(sscanf(str, "bind %255s %255s", keyname, binding) == 2) {
       std::string key_name(keyname);
       if(_manager.input_name_to_key.find(binding) != _manager.input_name_to_key.end()) {
@@ -537,13 +670,13 @@ void G13_KeyPad::command(char const *str) {
         if(key) {
           key->set_mapping(bind);
         } else if(key_name == "STICK_LEFT") {
-          this->stick_keys[STICK_LEFT] = bind;
+        	_stick.stick_keys[STICK_LEFT] = bind;
         } else if(key_name == "STICK_RIGHT") {
-          this->stick_keys[STICK_RIGHT] = bind;
+        	_stick.stick_keys[STICK_RIGHT] = bind;
         } else if(key_name == "STICK_UP") {
-          this->stick_keys[STICK_UP] = bind;
+        	_stick.stick_keys[STICK_UP] = bind;
         } else if(key_name == "STICK_DOWN") {
-          this->stick_keys[STICK_DOWN] = bind;
+        	_stick.stick_keys[STICK_DOWN] = bind;
         } else {
           cerr << "unknown g13 key: " << keyname << endl;
         }
