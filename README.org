@@ -38,10 +38,10 @@ would set M1, M3 and MR, and unset M2).
 
 This binds a key or a stick zone. The possible values of <keyname> for keys are shown upon startup (e.g. G1).
 
-    <action> can be a key, possible values shown upon startup  (e.g. KEY_LEFTSHIFT).
-    <action> can be multiple keys,  like **bind G1 KEY_LEFTSHIFT+KEY_F1**
-    <action> can be pipe output, by using ">" followed by text, as in **bind G3 >Hello** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
-    <action> can be a command, by using "!" followed by text, as in **bind G4 !stick_mode KEYS** 
+****    <action> can be a key, possible values shown upon startup  (e.g. KEY_LEFTSHIFT).
+****    <action> can be multiple keys,  like **bind G1 KEY_LEFTSHIFT+KEY_F1**
+****    <action> can be pipe output, by using ">" followed by text, as in **bind G3 >Hello** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
+****    <action> can be a command, by using "!" followed by text, as in **bind G4 !stick_mode KEYS** 
 
 *** stickmode <mode>
 
