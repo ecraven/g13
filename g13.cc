@@ -91,10 +91,12 @@ G13_Stick::G13_Stick( G13_KeyPad &keypad ) :
 		_north_pos( 127, 0 )
 {
     _stick_mode = STICK_KEYS;
+#if 0
     stick_keys[STICK_LEFT] = KEY_LEFT;
     stick_keys[STICK_RIGHT] = KEY_RIGHT;
     stick_keys[STICK_UP] = KEY_UP;
     stick_keys[STICK_DOWN] = KEY_DOWN;
+#endif
 
     _zones.push_back( G13_StickZone( "STICK_UP", G13_ZoneBounds( 0.0, 0.1, 1.0, 0.3 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_UP") ) ) );
     _zones.push_back( G13_StickZone( "STICK_DOWN", G13_ZoneBounds( 0.0, 0.7, 1.0, 0.9 ), G13_ActionPtr( new G13_Action_Keys( keypad, "KEY_DOWN") ) ) );
@@ -106,12 +108,16 @@ G13_Stick::G13_Stick( G13_KeyPad &keypad ) :
 
 }
 
-G13_StickZone *G13_Stick::zone( const std::string &name ) {
+G13_StickZone *G13_Stick::zone( const std::string &name, bool create ) {
 
 	BOOST_FOREACH( G13_StickZone &zone, _zones ) {
 		if( zone._name == name ) {
 			return &zone;
 		}
+	}
+	if( create ) {
+		_zones.push_back( G13_StickZone( "STICK_UP2", G13_ZoneBounds( 0.0, 0.0, 0.0, 0.0 ) ) );
+		return zone(name);
 	}
 	return 0;
 }
@@ -129,9 +135,15 @@ void G13_Stick::set_mode( stick_mode_t  m ) {
 }
 
 void G13_Stick::_recalc_calibrated() {
+}
+
+void G13_Stick::remove_zone( const G13_StickZone &zone ) {
+	G13_StickZone target(zone);
+	_zones.erase(std::remove(_zones.begin(), _zones.end(), target), _zones.end());
 
 }
 void G13_StickZone::test( const G13_ZoneCoord &loc ) {
+	if( !_action ) return;
 	bool prior_active = _active;
 	_active = _bounds.contains( loc );
 	if( !_active ) {
@@ -629,60 +641,156 @@ void G13_Action_PipeOut::act( G13_KeyPad &kp, bool is_down ) {
 	}
 }
 
+
+G13_Action_Command::G13_Action_Command( G13_KeyPad & keypad, const std::string &cmd ) : G13_Action(keypad ),
+		_cmd(cmd)
+{}
+G13_Action_Command::~G13_Action_Command() {}
+
+void G13_Action_Command::act( G13_KeyPad &kp, bool is_down ) {
+	if( is_down ) {
+		keypad().command( _cmd.c_str() );
+	}
+}
+
 G13_ActionPtr G13_KeyPad::make_action( const std::string &action ) {
+	if( !action.size() ) {
+		throw G13_CommandException( "empty action string" );
+	}
 	if( action[0] == '>' ) {
-		return G13_ActionPtr( new G13_Action_PipeOut( *this,&action[1] ) );
+		return G13_ActionPtr( new G13_Action_PipeOut( *this, &action[1] ) );
+	} else 	if( action[0] == '!' ) {
+		return G13_ActionPtr( new G13_Action_Command( *this, &action[1] ) );
 	} else {
 		return G13_ActionPtr( new G13_Action_Keys( *this, action ) );
 	}
 	throw G13_CommandException( "can't create action for " + action );
 }
 
+#include <string.h>
+
+typedef const char * CCP;
+static const char *advance( CCP &source, std::string &dest ) {
+	const char *space = source ? strchr( source, ' ' ) : 0;
+	if( space ) {
+		dest = std::string( source, space-source );
+		source = space+1;
+	} else {
+		dest = source;
+		source = 0;
+	}
+	return source;
+}
 
 void G13_KeyPad::command(char const *str) {
     int red, green, blue, mod, row, col;;
     char keyname[256];
     char binding[256];
     char c;
+    const char *remainder = str;
+
+    std::string cmd;
+    advance( remainder, cmd );
+
+    if( remainder ) {
+    	if ( cmd == "out" ) {
+    		lcd().write_string( remainder );
+        } else if (cmd == "pos") {
+        	if(sscanf(str, "pos %i %i", &row, &col) == 2) {
+        		lcd().write_pos( row, col );
+        	} else {
+        		cerr << "bad pos : " << str <<  endl;
+        	}
+
+    	} else if( cmd == "bind" ) {
+        	std::string keyname;
+        	advance( remainder, keyname );
+        	std::string action = remainder;
+        	try {
+    			if(auto key = current_profile->find_key(keyname)) {
+    				key->_action = make_action( action );
+    			} else if( auto stick_key = _stick.zone( keyname ) ) {
+    				stick_key->_action = make_action( action );
+    			} else {
+    				cerr << "bind " << keyname << " unknown" <<  endl;
+    			}
+    			//cout << "bind " << keyname << " [" << action << "]" << endl;
+        	}
+        	catch( const std::exception &ex ) {
+        		cerr << "bind " << keyname << " " << action << " failed : " << ex.what() <<  endl;
+        	}
+        } else if( cmd == "profile") {
+        	switch_to_profile( remainder );
+        } else if( cmd == "font" ) {
+        	switch_to_font( remainder );
+        } else if( cmd == "mod" ) {
+        	set_mode_leds( atoi(remainder) );
+        } else if( cmd == "textmode ") {
+        	lcd().text_mode = atoi(remainder);
+        } else if( cmd == "rgb" ) {
+            if(sscanf(str, "rgb %i %i %i", &red, &green, &blue) == 3) {
+              set_key_color(red, green, blue);
+            } else {
+            	cerr << "rgb bad format: <" << str << ">" <<  endl;
+            }
+        } else if( cmd == "stickmode ") {
+
+        	std::string mode = remainder;
+			#define STICKMODE_TEST( r, data, elem )							\
+        		if( remainder == BOOST_PP_STRINGIZE(elem) ) {				\
+        			_stick.set_mode( BOOST_PP_CAT( STICK_, elem ) );		\
+        		} else														\
+
+        	BOOST_PP_SEQ_FOR_EACH( STICKMODE_TEST, _,
+        			(ABSOLUTE)(RELATIVE)(KEYS)(CALCENTER)(CALBOUNDS)(CALNORTH) )
+        	{
+        		cerr << "unknown stick mode : <" << mode << ">" <<  endl;
+        	}
+        } else if( cmd == "stickzone ") {
+        	std::string operation, zonename;
+        	advance( remainder, operation );
+        	advance( remainder, zonename );
+        	if( operation == "add" ) {
+        		G13_StickZone *zone = _stick.zone(zonename,true);
+        	} else {
+        		G13_StickZone *zone = _stick.zone(zonename);
+        		if( !zone ) {
+        			throw G13_CommandException( "unknown stick zone" );
+        		}
+        		if( operation == "action" ) {
+        			zone->_action = make_action( remainder );
+        		} else if( operation == "bounds" ) {
+        			double x1, y1, x2, y2;
+        			if(sscanf(remainder, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2) != 4 ) {
+        				throw G13_CommandException( "bad bounds format" );
+        			}
+        			zone->_bounds = G13_ZoneBounds( x1, y1, x2, y2 );
+
+        		} else if( operation == "del" ) {
+        			_stick.remove_zone( *zone );
+        		}
+
+        	}
+        } else {
+        	cerr << "unknown command: <" << str << ">" <<  endl;
+        }
+    } else {
+    	if( cmd == "refresh" ) {
+        	lcd().image_send();
+    	} else if( cmd == "clear" ) {
+    		lcd().image_clear();
+    		lcd().image_send();
+    	} else {
+    	 	cerr << "unknown command: <" << str << ">" <<  endl;
+    	}
+
+    }
+    return;
+
     if(sscanf(str, "rgb %i %i %i", &red, &green, &blue) == 3) {
       set_key_color(red, green, blue);
     } else if(sscanf(str, "mod %i", &mod) == 1) {
       set_mode_leds( mod);
-    } else if(sscanf(str, "mbind %255s %255s", keyname, binding) == 2) {
-    	try {
-			auto key = current_profile->find_key(keyname);
-			if(key) {
-				key->_action = make_action( binding );
-			} else if( auto stick_key = _stick.zone( keyname ) ) {
-				stick_key->_action = make_action( binding );
-			} else {
-				cerr << "mbind " << keyname << " unknown" <<  endl;
-			}
-    	}
-    	catch( const std::exception &ex ) {
-    		cerr << "mbind " << keyname << " " << binding << " failed : " << ex.what() <<  endl;
-    	}
-    } else if(sscanf(str, "bind %255s %255s", keyname, binding) == 2) {
-      std::string key_name(keyname);
-      if(_manager.input_name_to_key.find(binding) != _manager.input_name_to_key.end()) {
-        int bind = _manager.input_name_to_key[binding];
-        auto key = current_profile->find_key(keyname);
-        if(key) {
-          key->set_mapping(bind);
-        } else if(key_name == "STICK_LEFT") {
-        	_stick.stick_keys[STICK_LEFT] = bind;
-        } else if(key_name == "STICK_RIGHT") {
-        	_stick.stick_keys[STICK_RIGHT] = bind;
-        } else if(key_name == "STICK_UP") {
-        	_stick.stick_keys[STICK_UP] = bind;
-        } else if(key_name == "STICK_DOWN") {
-        	_stick.stick_keys[STICK_DOWN] = bind;
-        } else {
-          cerr << "unknown g13 key: " << keyname << endl;
-        }
-      } else {
-        cerr << "unknown key: " << binding << endl;
-      }
     } else if(sscanf(str, "image %i %i", &red, &green) == 2) {
     	lcd().image_test(red,green);
     } else if(sscanf(str, "write_char %c %i %i", &c, &row, &col) == 3) {

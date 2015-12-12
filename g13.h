@@ -92,6 +92,17 @@ public:
 	std::string _out;
 };
 
+class G13_Action_Command : public G13_Action {
+public:
+	G13_Action_Command( G13_KeyPad & keypad, const std::string &cmd );
+	virtual ~G13_Action_Command();
+
+	virtual void act( G13_KeyPad &, bool is_down );
+
+	std::string _cmd;
+};
+
+
 typedef boost::shared_ptr<G13_Action> G13_ActionPtr;
 
 class G13_Key {
@@ -348,6 +359,9 @@ public:
 
 	G13_StickZone( const std::string &name,  const G13_ZoneBounds &, G13_ActionPtr = 0 );
 
+	bool operator == ( const G13_StickZone &other ) const {
+		return _name == other._name;
+	}
 
 };
 
@@ -361,8 +375,9 @@ public:
 	void parse_joystick(unsigned char *buf);
 
 	void set_mode( stick_mode_t );
-	G13_StickZone *zone( const std::string &);
+	G13_StickZone *zone( const std::string &, bool create=false );
 	void _recalc_calibrated();
+	void remove_zone( const G13_StickZone &zone );
 
 	G13_KeyPad &_keypad;
 	std::vector<G13_StickZone> _zones;
@@ -373,7 +388,7 @@ public:
 	G13_StickCoord _north_pos;
 
 	G13_StickCoord _current_pos;
-	int stick_keys[4];
+
 	stick_mode_t _stick_mode;
 
 };

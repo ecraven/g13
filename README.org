@@ -34,17 +34,36 @@ Sets the background color
 Sets the background light of the mod-keys. <n> is the sum of 1 (M1), 2 (M2), 4 (M3) and 8 (MR) (i.e. 13 
 would set M1, M3 and MR, and unset M2).
 
-*** bind <keyname> <binding>
+*** bind <keyname> <action>
 
-This binds a key. The possible values of <keyname> are shown upon startup (e.g. G1), same for <binding> (e.g. KEY_LEFTSHIFT).
+This binds a key or a stick zone. The possible values of <keyname> for keys are shown upon startup (e.g. G1).
 
-*** Stick mode
+<action> can be a key, possible values shown upon startup  (e.g. KEY_LEFTSHIFT).
+<action> can be multiple keys,  like **bind G1 KEY_LEFTSHIFT+KEY_F1**
+<action> can be pipe output, by using ">" followed by text, as in **bind G3 >Hello** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
+<action> can be a command, by using "!" followed by text, as in **bind G4 !stick_mode KEYS** 
 
-The stick can be used as an absolute input device or can send key events. Right now there is no command for this, you need to edit the source (file g13.cc, around line 622, this->stick_mode = STICK_KEYS, change to this->stick_mode = STICK_ABSOLUTE).
+*** stickmode <mode>
 
-You can bind the stick keys by binding the keynames STICK_LEFT, STICK_RIGHT, STICK_UP and STICK_DOWN.
+The stick can be used as an absolute input device or can send key events. You can change modes to one of the following:
+  **KEYS**        translates stick movements into key / action bindings
+  **ABSOLUTE**
+  **RELATIVE**
+  **CALCENTER**   calibrate stick center position
+  **CALBOUNDS**   calibrate stick boundaries
+  **CALNORTH**    calibrate stick north
+  
+*** stickzone <operation> <zonename> <args>
 
-*** LED display
+where <operation> can be
+   **add** add a new zone named **zonename**
+   **del** remove zone named **zonename**
+   **action** set action for zone 
+   **bounds** set boundaries for zone, **args** are X1, Y1, X2, Y2, where X1/Y1 are top left, X2/Y2 are bottom right, values are floating point from 0.0 to 1.0 
+
+Default created zones are LEFT, RIGHT, UP and DOWN.
+
+*** LCD display
 
 Use pbm2lpbm to convert a pbm image to the correct format, then just cat that into the pipe (cat starcraft2.lpbm > /tmp/g13-0).
 The pbm file must be 160x43 pixels.
