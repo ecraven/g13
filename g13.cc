@@ -85,9 +85,8 @@ void G13_KeyPad::parse_joystick(unsigned char *buf ) {
 
 G13_Stick::G13_Stick( G13_KeyPad &keypad ) :
 		_keypad(keypad),
-		_min_pos(0,0),
+		_bounds(0,0,255,255),
 		_center_pos(127,127),
-		_max_pos(255,255),
 		_north_pos( 127, 0 )
 {
     _stick_mode = STICK_KEYS;
@@ -130,7 +129,10 @@ void G13_Stick::set_mode( stick_mode_t  m ) {
 	}
 	_stick_mode = m;
 	switch( _stick_mode ) {
-
+	case STICK_CALBOUNDS:
+		_bounds.tl = G13_StickCoord( 255, 255 );
+		_bounds.br = G13_StickCoord( 0, 0 );
+		break;
 	}
 }
 
@@ -181,45 +183,37 @@ void G13_Stick::parse_joystick(unsigned char *buf) {
 		return;
 
 	case STICK_CALBOUNDS:
-
-#define BOUND_CHECK_XY( target, op, xy )								\
-	  if( _current_pos.xy op target.xy ) target.xy = _current_pos.xy;		\
-
-#define BOUND_CHECK( target, op ) 									\
-		BOUND_CHECK_XY( target, op, x )										\
-		BOUND_CHECK_XY( target, op, y )										\
-
-		BOUND_CHECK(_min_pos, <)
-		BOUND_CHECK(_max_pos, >)
+		_bounds.expand( _current_pos );
 		return;
-
 	};
 
+	double dx = 0.5;
+	if (_current_pos.x <= _center_pos.x) {
+		dx = _current_pos.x - _bounds.tl.x;
+		dx /= (_center_pos.x - _bounds.tl.x) * 2;
+	} else {
+		dx = _bounds.br.x - _current_pos.x;
+		dx /= (_bounds.br.x - _center_pos.x ) * 2;
+		dx = 1.0 - dx;
+	}
+	double dy = 0.5;
+	if (_current_pos.y <= _center_pos.y) {
+		dy = _current_pos.y - _bounds.tl.y;
+		dy /= (_center_pos.y - _bounds.tl.y) * 2;
+	} else {
+		dy = _bounds.br.y - _current_pos.y;
+		dy /= (_bounds.br.y -_center_pos.y ) * 2;
+		dy = 1.0 - dy;
+	}
+
+	// cerr << "x=" << _current_pos.x << " y=" << _current_pos.y << " dx=" << dx << " dy=" << dy << std::endl;
+	G13_ZoneCoord jpos(dx, dy);
 	if (_stick_mode == STICK_ABSOLUTE) {
 		send_event(_keypad.uinput_file, EV_ABS, ABS_X, _current_pos.x);
 		send_event(_keypad.uinput_file, EV_ABS, ABS_Y, _current_pos.y);
+		// cout << "send absolute mouse " << _current_pos.x << " x " << _current_pos.y << endl;
 	} else if (_stick_mode == STICK_KEYS) {
-		double dx = 0.5;
-		if (_current_pos.x <= _center_pos.x) {
-			dx = _current_pos.x - _min_pos.x;
-			dx /= (_center_pos.x - _min_pos.x) * 2;
-		} else {
-			dx = _max_pos.x - _current_pos.x;
-			dx /= (_center_pos.x - _min_pos.x) * 2;
-			dx = 1.0 - dx;
-		}
-		double dy = 0.5;
-		if (_current_pos.y <= _center_pos.y) {
-			dy = _current_pos.y - _min_pos.y;
-			dy /= (_center_pos.y - _min_pos.y) * 2;
-		} else {
-			dy = _max_pos.y - _current_pos.y;
-			dy /= (_center_pos.y - _min_pos.y) * 2;
-			dy = 1.0 - dy;
-		}
 
-		// cerr << "x=" << _current_pos.x << " y=" << _current_pos.y << " dx=" << dx << " dy=" << dy << std::endl;
-		G13_ZoneCoord jpos(dx, dy);
 		BOOST_FOREACH( G13_StickZone &zone, _zones ) {
 			zone.test(jpos);
 		}
@@ -733,12 +727,13 @@ void G13_KeyPad::command(char const *str) {
             } else {
             	cerr << "rgb bad format: <" << str << ">" <<  endl;
             }
-        } else if( cmd == "stickmode ") {
+        } else if( cmd == "stickmode") {
 
         	std::string mode = remainder;
 			#define STICKMODE_TEST( r, data, elem )							\
-        		if( remainder == BOOST_PP_STRINGIZE(elem) ) {				\
+        		if( mode == BOOST_PP_STRINGIZE(elem) ) {					\
         			_stick.set_mode( BOOST_PP_CAT( STICK_, elem ) );		\
+        			return;													\
         		} else														\
 
         	BOOST_PP_SEQ_FOR_EACH( STICKMODE_TEST, _,

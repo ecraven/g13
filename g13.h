@@ -329,6 +329,13 @@ public:
 	bool contains( const CT &pos ) const {
 		return tl.x <= pos.x && tl.y <= pos.y &&  pos.x <= br.x && pos.y <= br.y;
 	}
+
+	void expand( const CT &pos ) {
+		if( pos.x < tl.x ) tl.x = pos.x;
+		if( pos.y < tl.y ) tl.y = pos.y;
+		if( pos.x > br.x ) br.x = pos.x;
+		if( pos.y > br.y ) br.y = pos.y;
+	}
 	CT tl;
 	CT br;
 };
@@ -382,9 +389,8 @@ public:
 	G13_KeyPad &_keypad;
 	std::vector<G13_StickZone> _zones;
 
-	G13_StickCoord _min_pos;
+	G13_StickBounds _bounds;
 	G13_StickCoord _center_pos;
-	G13_StickCoord _max_pos;
 	G13_StickCoord _north_pos;
 
 	G13_StickCoord _current_pos;

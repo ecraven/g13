@@ -103,7 +103,7 @@ Resends the LCD buffer
 
 *** profile <profile_name>
     
-Selects <profile_name> to be the current profile, creating it if it doesn't exist.
+Selects <profile_name> to be the current profile, it if it doesn't exist creating it as a copy of the current profile.
 
 All key binding changes (from the bind command) are made on the current profile.
  
