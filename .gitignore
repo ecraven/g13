@@ -1,0 +1,7 @@
+/g13d
+.cproject
+.project
+.pydevproject
+*.o
+pbm2lpbm
+.settings/*
