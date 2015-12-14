@@ -47,82 +47,81 @@ The daemon creates a pipe at /tmp/g13-0, you can send commands via that pipe (e.
 
 ## Commands
 
-### rgb <r> <g> <b>
+### rgb *r* *g* *b*
 
 Sets the background color
 
-### mod <n>
+### mod *n*
 
-Sets the background light of the mod-keys. <n> is the sum of 1 (M1), 2 (M2), 4 (M3) and 8 (MR) (i.e. 13 
+Sets the background light of the mod-keys. *n* is the sum of 1 (M1), 2 (M2), 4 (M3) and 8 (MR) (i.e. 13 
 would set M1, M3 and MR, and unset M2).
 
-### bind <keyname> <action>
+### bind *keyname* *action*
 
-This binds a key or a stick zone. The possible values of <keyname> for keys are shown upon startup (e.g. G1).
+This binds a key or a stick zone. The possible values of *keyname* for keys are shown upon startup (e.g. G1).
 
-    <action> can be a key, possible values shown upon startup  (e.g. KEY_LEFTSHIFT).
-    
-    <action> can be multiple keys,  like **bind G1 KEY_LEFTSHIFT+KEY_F1**
+* *action* can be a key, possible values shown upon startup  (e.g. KEY_LEFTSHIFT).
+* *action* can be multiple keys,  like **bind G1 KEY_LEFTSHIFT+KEY_F1**
+* *action* can be pipe output, by using ">" followed by text, as in **bind G3 >Hello** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
+* *action* can be a command, by using "!" followed by text, as in **bind G4 !stick_mode KEYS** 
 
-    <action> can be pipe output, by using ">" followed by text, as in **bind G3 >Hello** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
-
-    <action> can be a command, by using "!" followed by text, as in **bind G4 !stick_mode KEYS** 
-
-### stickmode <mode>
+### stickmode *mode*
 
 The stick can be used as an absolute input device or can send key events. You can change modes to one of the following:
 
 Mode       | Description
 -----------|---------------------------
 KEYS       | translates stick movements into key / action bindings
-ABSOLUTE   |
-RELATIVE   |
+ABSOLUTE   | stick becomes mouse with absolute positioning
+RELATIVE   | not quite working yet...
 CALCENTER  | calibrate stick center position
 CALBOUNDS  | calibrate stick boundaries
 CALNORTH   | calibrate stick north
   
-### stickzone <operation> <zonename> <args>
+### stickzone *operation* *zonename* *args*
 
-where <operation> can be
+where *operation* can be
 
 operation | what it does
 ----------|----------------
-add       | add a new zone named **zonename**
-del       | remove zone named **zonename**
+add       | add a new zone named *zonename*
+del       | remove zone named *zonename*
 action    | set action for zone 
-bounds    | set boundaries for zone, **args** are X1, Y1, X2, Y2, where X1/Y1 are top left, X2/Y2 are bottom right, values are floating point from 0.0 to 1.0 
+bounds    | set boundaries for zone, *args* are X1, Y1, X2, Y2, where X1/Y1 are top left, X2/Y2 are bottom right, values are floating point from 0.0 to 1.0 
 
 Default created zones are LEFT, RIGHT, UP and DOWN.
 
 
-### pos <row> <col>
+### pos *row* *col*
 
-Sets the current text position to <row> <col>
+Sets the current text position to *row* *col*.  
+* *row* is specified in characters (0-4), as all fonts are 8 pixels high and rows start on pixel row 0, 8, 16, 24, or 32
+* *col* is specified in pixels (0-159)
 
-### out <text>
+### out *text*
 
-Writes <text> to the LCD at the current text position
+Writes *text* to the LCD at the current text position, and advances the current position based on the font size
 
 ### clear
 
 Clears the LCD
 
-### textmode <mode>
+### textmode *mode*
 
-Sets the text mode to <mode>, current options are 0 (normal) or 1 (inverted)
+Sets the text mode to *mode*, current options are 0 (normal) or 1 (inverted)
 
 ### refresh
 
 Resends the LCD buffer
 
-### profile <profile_name>
+### profile *profile_name*
     
-Selects <profile_name> to be the current profile, it if it doesn't exist creating it as a copy of the current profile.
+Selects *profile_name* to be the current profile, it if it doesn't exist creating it as a copy of the current profile.
 
 All key binding changes (from the bind command) are made on the current profile.
  
  
-### font <font_name>   
+### font *font_name*   
 
 Switch font, current options are 8x8 and 5x8    
 
