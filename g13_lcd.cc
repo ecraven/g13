@@ -1,18 +1,37 @@
+/*
+ 	 pixels are mapped rather strangely for G13 buffer...
+
+	  byte 0 contains column 0 / row 0 - 7
+	  byte 1 contains column 1 / row 0 - 7
+
+	 so the masks for each pixel are laid out as below (ByteOffset.PixelMask)
+
+	 00.01 01.01 02.01 ...
+	 00.02 01.02 02.02 ...
+	 00.04 01.04 02.04 ...
+	 00.08 01.08 02.08 ...
+	 00.10 01.10 02.10 ...
+	 00.20 01.20 02.20 ...
+	 00.40 01.40 02.40 ...
+	 00.80 01.80 02.80 ...
+	 A0.01 A1.01 A2.01 ...
+ */
 
 #include "g13.h"
 #include "logo.h"
+
 using namespace std;
 
 namespace G13 {
 
-void G13_KeyPad::init_lcd() {
-  int error = libusb_control_transfer(handle, 0, 9, 1, 0, G13_NULL, 0, 1000);
+void G13_Device::init_lcd() {
+  int error = libusb_control_transfer(handle, 0, 9, 1, 0, 0, 0, 1000);
   if(error) {
-    cerr << "Error when initialising lcd endpoint" << endl;
+    cerr << "Error when initializing lcd endpoint" << endl;
   }
 }
 
-void G13_KeyPad::write_lcd(libusb_context *ctx, unsigned char *data, size_t size) {
+void G13_Device::write_lcd( unsigned char *data, size_t size ) {
   init_lcd();
   if(size != G13_LCD_BUFFER_SIZE) {
     cerr << "Invalid LCD data size " << size << ", should be " << G13_LCD_BUFFER_SIZE;
@@ -25,11 +44,10 @@ void G13_KeyPad::write_lcd(libusb_context *ctx, unsigned char *data, size_t size
   int bytes_written;
   int error = libusb_interrupt_transfer(handle, LIBUSB_ENDPOINT_OUT | G13_LCD_ENDPOINT, buffer, G13_LCD_BUFFER_SIZE + 32, &bytes_written, 1000);
   if(error)
-    cerr << "Error when transfering image: " << error << ", " << bytes_written << " bytes written" << endl;
+    cerr << "Error when transferring image: " << error << ", " << bytes_written << " bytes written" << endl;
 }
 
-void G13_KeyPad::write_lcd_file(libusb_context *ctx, const string &filename) {
-	G13_KeyPad *g13 = this;
+void G13_Device::write_lcd_file( const string &filename ) {
   filebuf *pbuf;
   ifstream filestr;
   size_t size;
@@ -45,18 +63,45 @@ void G13_KeyPad::write_lcd_file(libusb_context *ctx, const string &filename) {
   pbuf->sgetn(buffer, size);
 
   filestr.close();
-  write_lcd(ctx, (unsigned char *)buffer, size);
+  write_lcd( (unsigned char *)buffer, size );
 }
 
 void G13_LCD::image(unsigned char *data, int size) {
-	_keypad.write_lcd( _keypad._manager.ctx, data, size);
+	_keypad.write_lcd( data, size );
 }
 
-G13_LCD::G13_LCD( G13_KeyPad &keypad ) : _keypad(keypad) {
+G13_LCD::G13_LCD( G13_Device &keypad ) : _keypad(keypad) {
     cursor_col = 0;
     cursor_row = 0;
     text_mode = 0;
 }
+
+void G13_LCD::image_setpixel(unsigned row, unsigned col) {
+	unsigned offset = image_byte_offset(row, col); // col + (row /8 ) * BYTES_PER_ROW * 8;
+	unsigned char mask = 1 << ((row) & 7);
+
+	if (offset >= G13_LCD_BUF_SIZE) {
+		std::cerr << "bad offset " << offset << " for " << (row) << " x "
+				<< (col) << std::endl;
+		return;
+	}
+
+	image_buf[offset] |= mask;
+}
+
+void G13_LCD::image_clearpixel(unsigned row, unsigned col) {
+
+	unsigned offset = image_byte_offset(row, col); // col + (row /8 ) * BYTES_PER_ROW * 8;
+	unsigned char mask = 1 << ((row) & 7);
+
+	if (offset >= G13_LCD_BUF_SIZE) {
+		std::cerr << "bad offset " << offset << " for " << (row) << " x "
+				<< (col) << std::endl;
+		return;
+	}
+	image_buf[offset] &= ~mask;
+}
+
 
 void G13_LCD::write_pos(int row, int col ) {
 	cursor_row = row;
@@ -72,7 +117,7 @@ void G13_LCD::write_char( char c, int row, int col ) {
 	if( row == -1 ) {
 		row = cursor_row;
 		col = cursor_col;
-		cursor_col += _keypad.current_font->_width;
+		cursor_col += _keypad.current_font().width();
 		if( cursor_col >= G13_LCD_COLUMNS ) {
 			cursor_col = 0;
 			if( ++cursor_row >= G13_LCD_TEXT_ROWS ) {
@@ -81,11 +126,11 @@ void G13_LCD::write_char( char c, int row, int col ) {
 		}
 	}
 
-	unsigned offset = image_byte_offset( row*G13_LCD_TEXT_CHEIGHT, col ); //*_keypad.current_font->_width );
+	unsigned offset = image_byte_offset( row*G13_LCD_TEXT_CHEIGHT, col ); //*_keypad._current_font->_width );
 	if( text_mode ) {
-		memcpy( & image_buf[offset], &_keypad.current_font->chars[c].bits_inverted, _keypad.current_font->_width );
+		memcpy( & image_buf[offset], &_keypad.current_font().char_data(c).bits_inverted, _keypad.current_font().width() );
 	} else {
-		memcpy( & image_buf[offset], &_keypad.current_font->chars[c].bits_regular, _keypad.current_font->_width );
+		memcpy( & image_buf[offset], &_keypad.current_font().char_data(c).bits_regular, _keypad.current_font().width() );
 	}
 }
 
@@ -99,7 +144,7 @@ void G13_LCD::write_string( const char *str ) {
 			}
 		} else if( *str == '\t' ) {
 			cursor_col += 4 - (cursor_col % 4) ;
-			if( ++cursor_col >= G13_LCD_TEXT_COLUMNS ) {
+			if( ++cursor_col >= G13_LCD_COLUMNS ) {
 				cursor_col = 0;
 				if( ++cursor_row >= G13_LCD_TEXT_ROWS ) {
 					cursor_row = 0;

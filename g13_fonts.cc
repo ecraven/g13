@@ -1,22 +1,3 @@
-#include <libusb-1.0/libusb.h>
-#include <iostream>
-#include <vector>
-#include <boost/lexical_cast.hpp>
-#include <boost/foreach.hpp>
-#include <boost/algorithm/string.hpp>
-#include <boost/preprocessor/seq.hpp>
-#include <boost/preprocessor/cat.hpp>
-#include <iomanip>
-#include <sys/stat.h>
-#include "logo.h"
-#include <string.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string>
-#include <fstream>
-#include <linux/uinput.h>
-#include <fcntl.h>
 #include "g13.h"
 
 using namespace std;
@@ -422,19 +403,19 @@ int GetFontCharacterCount( T(&)[size] ) { return size; }
 template < class ARRAY_T, class FLAGST >
 void G13_Font::install_font( ARRAY_T &data, FLAGST flags, int first ) {
 	for( size_t i = 0; i < GetFontCharacterCount(data); i++ ) {
-		chars[i+first].set_character( &data[i][0], _width, flags );
+		_chars[i+first].set_character( &data[i][0], _width, flags );
 	}
 }
-void G13_KeyPad::_init_fonts() {
+void G13_Device::_init_fonts() {
 
-	current_font = FontPtr( new G13_Font("8x8",8) );
-	_fonts[current_font->_name] = current_font;
+	_current_font = FontPtr( new G13_Font("8x8",8) );
+	_fonts[_current_font->name()] = _current_font;
 
-	current_font->install_font( font8x8_basic, G13_FontChar::FF_ROTATE, 0 );
+	_current_font->install_font( font8x8_basic, G13_FontChar::FF_ROTATE, 0 );
 
 	FontPtr fiveXeight( new G13_Font("5x8",5) );
 	fiveXeight->install_font( font5x8, 0, 32 );
-	_fonts[fiveXeight->_name] = fiveXeight;
+	_fonts[fiveXeight->name()] = fiveXeight;
 }
 
 } // namespace G13
