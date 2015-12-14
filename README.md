@@ -12,7 +12,8 @@ If you want to run the daemon as user, put the file 91-g13.rules into /etc/udev/
 
 ## Running
 
-Connect your device, then run ./g13, it should automatically find your device.
+
+Connect your device, then run ./g13d, it should automatically find your device.
 
 If you see output like
 
@@ -41,15 +42,41 @@ If you see output like
 
 that is good. This also shows you which name the keys on the G13 have, and what keys you can bind them to.
 
+### Command line options
+
+The following options can be used when starting g13d
+
+Option 				|  Description
+--------------------|-------------------------------------------------
+ --help             | show help
+ --logo *arg*       | set logo from file
+ --config *arg*     | load config commands from file
+ --pipe_in *arg*    | specify name for input pipe
+ --pipe_out *arg*   | specify name for output pipe
+
 ## Configuring / Remote Control
 
-The daemon creates a pipe at /tmp/g13-0, you can send commands via that pipe (e.g. by running *"echo rgb 0 255 0 > /tmp/g13-0"*)
+Configuration is accomplished using the commands described in the [Commands] section.
+
+Commands can be loaded from a file specified by the --config option on the command line.  
+
+Commands can be also be sent to the command input pipe, which is at ***/tmp/g13-0*** by 
+default. Example:
+    ***echo rgb 0 255 0 > /tmp/g13-0***
+
+### Actions
+
+Various parts of configuring the G13 depend on assigning actions to occur based on something happening to the G13. 
+* key, possible values shown upon startup  (e.g. ***KEY_LEFTSHIFT***).
+* multiple keys,  like ***KEY_LEFTSHIFT+KEY_F1**
+* pipe output, by using ">" followed by text, as in ***>Hello*** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
+* ommand, by using "!" followed by text, as in ***!stick_mode KEYS*** 
 
 ## Commands
 
 ### rgb *r* *g* *b*
 
-Sets the background color
+Sets the backlight color
 
 ### mod *n*
 
@@ -58,12 +85,9 @@ would set M1, M3 and MR, and unset M2).
 
 ### bind *keyname* *action*
 
-This binds a key or a stick zone. The possible values of *keyname* for keys are shown upon startup (e.g. G1).
-
-* *action* can be a key, possible values shown upon startup  (e.g. KEY_LEFTSHIFT).
-* *action* can be multiple keys,  like **bind G1 KEY_LEFTSHIFT+KEY_F1**
-* *action* can be pipe output, by using ">" followed by text, as in **bind G3 >Hello** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
-* *action* can be a command, by using "!" followed by text, as in **bind G4 !stick_mode KEYS** 
+This binds a key or a stick zone. 
+* The possible values of *keyname* for keys are shown upon startup (e.g. G1).
+* The possible values of *action* are described in [Actions].
 
 ### stickmode *mode*
 
@@ -80,17 +104,26 @@ CALNORTH   | calibrate stick north
   
 ### stickzone *operation* *zonename* *args*
 
-where *operation* can be
+defines zones to be used when the stick is in KEYS mode
 
+Where *operation* can be
 operation | what it does
 ----------|----------------
 add       | add a new zone named *zonename*
 del       | remove zone named *zonename*
-action    | set action for zone 
-bounds    | set boundaries for zone, *args* are X1, Y1, X2, Y2, where X1/Y1 are top left, X2/Y2 are bottom right, values are floating point from 0.0 to 1.0 
+action    | set action for zone, see [Actions]  
+bounds    | set boundaries for zone, *args* are X1, Y1, X2, Y2, where X1/Y1 are top left corner, X2/Y2 are bottom right corner 
 
 Default created zones are LEFT, RIGHT, UP and DOWN.
 
+Zone boundary coordinates are based on a floating point value from 0.0 (top/left) to 1.0 (bottom/right).  When the 
+stick enters the boundary area, the zone's action ***down*** activity will be fired.  On exiting the boundary, the
+action ***up*** activity will be fired.  
+
+Example:
+    stickzone add TheBottomLeft
+    stickzone bounds TheBottomLeft 0.0 0.9 0.1 1.0
+    stickzone action KEY_END
 
 ### pos *row* *col*
 
@@ -119,8 +152,7 @@ Resends the LCD buffer
 Selects *profile_name* to be the current profile, it if it doesn't exist creating it as a copy of the current profile.
 
 All key binding changes (from the bind command) are made on the current profile.
- 
- 
+  
 ### font *font_name*   
 
 Switch font, current options are 8x8 and 5x8    
@@ -132,6 +164,6 @@ The pbm file must be 160x43 pixels.
 
 ## License
 
-All files without a copyright notice are public domainplaced in the public domain. Do with it whatever you want.
+All files without a copyright notice are placed in the public domain. Do with it whatever you want.
 
 Some source code files include MIT style license - see files for specifics.

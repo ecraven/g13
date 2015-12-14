@@ -1,5 +1,6 @@
 #include "g13.h"
 #include "logo.h"
+#include <fstream>
 using namespace std;
 
 // *************************************************************************
@@ -17,11 +18,11 @@ void G13_Device::send_event(int type, int code, int val) {
 	_event.type = type;
 	_event.code = code;
 	_event.value = val;
-	write(uinput_file, &_event, sizeof(_event));
+	write(_uinput_fid, &_event, sizeof(_event));
 }
 
 void G13_Device::write_output_pipe( const std::string &out ) {
-	write( fifo_out, out.c_str(), out.size() );
+	write( _output_pipe_fid, out.c_str(), out.size() );
 }
 
 void G13_Device::set_mode_leds(int leds) {
@@ -157,7 +158,7 @@ int g13_create_uinput(G13_Device *g13) {
 }
 
 void G13_Device::register_context(libusb_context *_ctx) {
-	ctx = ctx;
+	ctx = _ctx;
 
 	int leds = 0;
 	int red = 0;
@@ -170,21 +171,24 @@ void G13_Device::register_context(libusb_context *_ctx) {
 
 	write_lcd( g13_logo, sizeof(g13_logo) );
 
-	uinput_file = g13_create_uinput(this);
-	fifo = g13_create_fifo(fifo_name());
-	std::string out_name(fifo_name());
-	out_name += "_out";
-	fifo_out = g13_create_fifo(out_name.c_str());
+	_uinput_fid = g13_create_uinput(this);
 
-	if ( fifo == -1 ) {
+
+	_input_pipe_name = _manager.make_pipe_name(this,true);
+	_input_pipe_fid = g13_create_fifo(_input_pipe_name.c_str());
+	_output_pipe_name = _manager.make_pipe_name(this,false);
+	_output_pipe_fid = g13_create_fifo(_output_pipe_name.c_str());
+
+	if ( _input_pipe_fid == -1 ) {
 		cerr << "failed opening pipe" << endl;
 	}
 }
 
 void G13_Device::cleanup() {
-	remove(fifo_name());
-	ioctl(uinput_file, UI_DEV_DESTROY);
-	close(uinput_file);
+	remove(_input_pipe_name.c_str());
+	remove(_output_pipe_name.c_str());
+	ioctl(_uinput_fid, UI_DEV_DESTROY);
+	close(_uinput_fid);
 	libusb_release_interface(handle, 0);
 	libusb_close(handle);
 }
@@ -247,36 +251,62 @@ int G13_Device::read_keys() {
 }
 
 
+void G13_Device::read_config_file( const std::string &filename ) {
+	std::ifstream s( filename );
 
+	std::cout << "reading configuration from " << filename << std::endl;
+	while( s.good() ) {
+
+		// grab a line
+		char buf[1024];
+		buf[0] = 0;
+		buf[sizeof(buf)-1] = 0;
+		s.getline( buf, sizeof(buf)-1 );
+
+		// strip comment
+		char *comment = strchr(buf,'#');
+		if( comment ) {
+			comment--;
+			while( comment > buf && isspace( *comment ) ) comment--;
+			*comment = 0;
+		}
+
+		// send it
+		if( buf[0] ) {
+			std::cout << "  cfg: " << buf << std::endl;
+			command( buf );
+		}
+	}
+}
 
 void G13_Device::read_commands() {
-	G13_Device *g13 = this;
+
 	fd_set set;
 	FD_ZERO(&set);
-	FD_SET(g13->fifo, &set);
+	FD_SET(_input_pipe_fid, &set);
 	struct timeval tv;
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;
-	int ret = select(g13->fifo + 1, &set, 0, 0, &tv);
+	int ret = select(_input_pipe_fid + 1, &set, 0, 0, &tv);
 	if (ret > 0) {
 		unsigned char buf[1024 * 1024];
 		memset(buf, 0, 1024 * 1024);
-		ret = read(g13->fifo, buf, 1024 * 1024);
+		ret = read(_input_pipe_fid, buf, 1024 * 1024);
 		//    std::cout << "INFO: read " << ret << " characters" << std::endl;
 		if (ret == 960) { // TODO probably image, for now, don't test, just assume image
-			g13->lcd().image(buf, ret);
+			lcd().image(buf, ret);
 		} else {
 			std::string buffer = reinterpret_cast<const char*>(buf);
 			std::vector<std::string> lines;
 			boost::split(lines, buffer, boost::is_any_of("\n\r"));
 			//      std::cout << "INFO: lines: " << lines.size() << std::endl;
 			BOOST_FOREACH(std::string const &cmd, lines) {
-				std::vector<std::string> command;
-				boost::split(command, cmd, boost::is_any_of("#"));
+				std::vector<std::string> command_comment;
+				boost::split(command_comment, cmd, boost::is_any_of("#"));
 				//        std::cout << "INFO: command [" << command.size() << "]: " << command[0] << " (" << command[0].size() << ")" << std::endl;
-				if (command.size() > 0 && command[0] != std::string("")) {
-					cout << "command: " << command[0] << endl;
-					g13->command(command[0].c_str());
+				if (command_comment.size() > 0 && command_comment[0] != std::string("")) {
+					cout << "command: " << command_comment[0] << endl;
+					command(command_comment[0].c_str());
 				}
 			}
 		}
@@ -289,14 +319,14 @@ G13_Device::G13_Device(G13_Manager &manager, libusb_device_handle *handle,
 		_lcd(*this),
 		_stick(*this),
 		handle(handle),
-		id(_id),
-		uinput_file(-1),
+		_id_within_manager(_id),
+		_uinput_fid(-1),
 		ctx(0)
 {
 	_current_profile = ProfilePtr(new G13_Profile(*this));
 	_profiles["default"] = _current_profile;
 
-	_fifo_name = CONTROL_DIR+ "g13-" + boost::lexical_cast<std::string>(id);
+
 
 	for (int i = 0; i < sizeof(keys); i++)
 		keys[i] = false;
@@ -593,6 +623,45 @@ void G13_Manager::set_stop(int) {
 	running = false;
 }
 
+std::string G13_Manager::string_config_value( const std::string &name ) const {
+	try {
+		return find_or_throw( _string_config_values, name );
+	}
+	catch( ... )
+	{
+		return "";
+	}
+}
+void G13_Manager::set_string_config_value( const std::string &name, const std::string &value ) {
+	std::cout << "set_string_config_value " << name << " = " << repr(value) << std::endl;
+	_string_config_values[name] = value;
+}
+
+std::string G13_Manager::make_pipe_name( G13_Device *d, bool is_input ) {
+	if( is_input ) {
+		std::string config_base = string_config_value( "pipe_in" );
+		if( config_base.size() ) {
+			if( d->id_within_manager() == 0 ) {
+				return config_base;
+			} else {
+				return config_base + "-" + boost::lexical_cast<std::string>(d->id_within_manager());
+			}
+		}
+		return CONTROL_DIR+ "g13-" + boost::lexical_cast<std::string>(d->id_within_manager());
+	} else {
+		std::string config_base = string_config_value( "pipe_out" );
+		if( config_base.size() ) {
+			if( d->id_within_manager() == 0 ) {
+				return config_base;
+			} else {
+				return config_base + "-" + boost::lexical_cast<std::string>(d->id_within_manager());
+			}
+		}
+
+		return CONTROL_DIR+ "g13-" + boost::lexical_cast<std::string>(d->id_within_manager()) +"_out";
+	}
+}
+
 int G13_Manager::run() {
 
 	init_keynames();
@@ -634,6 +703,12 @@ int G13_Manager::run() {
 	std::cout << "Active Stick zones " << std::endl;
 	g13s[0]->stick().display_zones(std::cout);
 
+	std::string config_fn = string_config_value( "config" );
+	std::cout << "config_fn = " << config_fn << std::endl;
+	if( config_fn.size() ) {
+		g13s[0]->read_config_file( config_fn );
+	}
+
 	do {
 		if (g13s.size() > 0)
 			for (int i = 0; i < g13s.size(); i++) {
@@ -647,16 +722,4 @@ int G13_Manager::run() {
 }
 } // namespace G13
 
-using namespace G13;
 
-int main(int argc, char *argv[]) {
-
-	G13_Manager manager;
-	if (argc == 2) {
-		cout << "Setting logo: " << argv[1] << endl;
-		manager.set_logo(argv[1]);
-	}
-
-	manager.run();
-}
-;

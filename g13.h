@@ -405,14 +405,14 @@ public:
   ProfilePtr profile( const std::string &name );
 
   void command(char const *str);
+
   void read_commands();
+  void read_config_file( const std::string &filename );
+
   int read_keys();
   void parse_joystick(unsigned char *buf);
 
   G13_ActionPtr make_action( const std::string & );
-
-
-  const char *fifo_name() { return _fifo_name.c_str(); }
 
   void set_key_color( int red, int green, int blue );
   void set_mode_leds( int leds );
@@ -434,6 +434,7 @@ public:
   G13_Font &current_font() { return *_current_font; }
   G13_Profile &current_profile() { return *_current_profile; }
 
+  int id_within_manager() const { return _id_within_manager; }
 protected:
 
   void _init_fonts();
@@ -443,15 +444,19 @@ protected:
   struct timeval _event_time;
   struct input_event _event;
 
+  int _id_within_manager;
   libusb_device_handle *handle;
-  int uinput_file;
-  int id;
-  int fifo;
-  int fifo_out;
   libusb_context *ctx;
 
+  int _uinput_fid;
 
-  std::string _fifo_name;
+  int _input_pipe_fid;
+  std::string _input_pipe_name;
+  int _output_pipe_fid;
+  std::string _output_pipe_name;
+
+
+
 
   std::map<std::string,FontPtr> _fonts;
   FontPtr _current_font;
@@ -486,8 +491,10 @@ public:
 	void set_logo( const std::string &fn ) { logo_filename = fn; }
 	int run();
 
+	std::string string_config_value( const std::string &name ) const;
+	void set_string_config_value( const std::string &name, const std::string &val );
 
-
+	std::string make_pipe_name( G13_Device *d, bool is_input );
 
 protected:
 
@@ -509,6 +516,8 @@ protected:
 	std::map<std::string,G13_KEY_INDEX> g13_name_to_key;
 	std::map<LINUX_KEY_VALUE,std::string> input_key_to_name;
 	std::map<std::string,LINUX_KEY_VALUE> input_name_to_key;
+
+	std::map<std::string, std::string> _string_config_values;
 
 	static bool running;
 	static void set_stop(int);
