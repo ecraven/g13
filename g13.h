@@ -79,7 +79,7 @@ public:
 	virtual ~G13_Action();
 
 	virtual void act( G13_Device &, bool is_down ) = 0;
-	virtual void display( std::ostream & ) const = 0;
+	virtual void dump( std::ostream & ) const = 0;
 
 	void act( bool is_down ) { act( keypad(), is_down ); }
 
@@ -103,7 +103,7 @@ public:
 	virtual ~G13_Action_Keys();
 
 	virtual void act( G13_Device &, bool is_down );
-	virtual void display( std::ostream & ) const;
+	virtual void dump( std::ostream & ) const;
 
 	std::vector<LINUX_KEY_VALUE> _keys;
 };
@@ -117,7 +117,7 @@ public:
 	virtual ~G13_Action_PipeOut();
 
 	virtual void act( G13_Device &, bool is_down );
-	virtual void display( std::ostream & ) const;
+	virtual void dump( std::ostream & ) const;
 
 	std::string _out;
 };
@@ -131,7 +131,7 @@ public:
 	virtual ~G13_Action_Command();
 
 	virtual void act( G13_Device &, bool is_down );
-	virtual void display( std::ostream & ) const;
+	virtual void dump( std::ostream & ) const;
 
 	std::string _cmd;
 };
@@ -176,6 +176,7 @@ class G13_Key : public G13_Actionable<G13_Profile> {
 public:
 
 
+	void					dump( std::ostream &o ) const;
 	G13_KEY_INDEX			index() const { return _index.index; }
 
 	void 					parse_key( unsigned char *byte, G13_Device *g13 );
@@ -224,18 +225,28 @@ protected:
  */
 class G13_Profile {
 public:
-	G13_Profile(G13_Device &keypad) : _keypad(keypad) {
+	G13_Profile(G13_Device &keypad, const std::string &name_arg ) : _keypad(keypad), _name(name_arg) {
 		_init_keys();
 	}
+	G13_Profile(const G13_Profile &other, const std::string &name_arg ) : _keypad(other._keypad), _name(name_arg), _keys(other._keys)
+	{
+	}
+
 
 	// search key by G13 keyname
-	G13_Key * find_key( const std::string &keyname );
+	G13_Key * 			find_key( const std::string &keyname );
 
-	void parse_keys( unsigned char *buf );
+	void				dump( std::ostream &o ) const;
+
+	void 				parse_keys( unsigned char *buf );
+	const std::string &name() const { return _name; }
+
+	const G13_Manager &manager() const;
 
 protected:
 	G13_Device &_keypad;
 	std::vector<G13_Key> _keys;
+	std::string _name;
 
 	void _init_keys();
 };
@@ -334,7 +345,7 @@ public:
 
 	bool operator == ( const G13_StickZone &other ) const { return _name == other._name; }
 
-	void				display( std::ostream & ) const;
+	void				dump( std::ostream & ) const;
 
 	void parse_key( unsigned char *byte, G13_Device *g13);
 	void test( const G13_ZoneCoord &loc );
@@ -365,7 +376,7 @@ public:
 
 	const std::vector<G13_StickZone> & zones() const { return _zones; }
 
-	void				display_zones( std::ostream & ) const;
+	void				dump( std::ostream & ) const;
 
 protected:
 
@@ -404,6 +415,7 @@ public:
   void switch_to_profile( const std::string &name );
   ProfilePtr profile( const std::string &name );
 
+  void dump(std::ostream &, int detail = 0 );
   void command(char const *str);
 
   void read_commands();
@@ -435,6 +447,7 @@ public:
   G13_Profile &current_profile() { return *_current_profile; }
 
   int id_within_manager() const { return _id_within_manager; }
+
 protected:
 
   void _init_fonts();
@@ -454,9 +467,6 @@ protected:
   std::string _input_pipe_name;
   int _output_pipe_fid;
   std::string _output_pipe_name;
-
-
-
 
   std::map<std::string,FontPtr> _fonts;
   FontPtr _current_font;
@@ -545,6 +555,11 @@ inline bool G13_Device::update(int key, bool v) {
     keys[key] = v;
     return old != v;
   }
+
+inline const G13_Manager &G13_Profile::manager() const
+{
+	return _keypad.manager();
+}
 
 // *************************************************************************
 

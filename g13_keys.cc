@@ -79,6 +79,25 @@ void G13_Profile::_init_keys() {
 	BOOST_PP_SEQ_FOR_EACH(MARK_NON_PARSED_KEY, _, G13_NONPARSED_KEY_SEQ)
 }
 
+// *************************************************************************
+void G13_Key::dump( std::ostream &o ) const {
+	o << manager().find_g13_key_name(index())  << "(" << index() << ") : ";
+	if( action() ) {
+		action()->dump(o);
+	} else {
+		o << "(no action)";
+	}
+}
+void G13_Profile::dump( std::ostream &o ) const {
+	o << "Profile " << repr( name() ) << std::endl;
+	BOOST_FOREACH( const G13_Key &key,  _keys ) {
+		if( key.action() ) {
+			o << "   ";
+			key.dump(o);
+			o << std::endl;
+		}
+	}
+}
 void G13_Profile::parse_keys(unsigned char *buf) {
 	buf += 3;
 	for (size_t i = 0; i < _keys.size(); i++) {

@@ -78,17 +78,17 @@ void G13_Stick::remove_zone( const G13_StickZone &zone ) {
 	_zones.erase(std::remove(_zones.begin(), _zones.end(), target), _zones.end());
 
 }
-void G13_Stick::display_zones( std::ostream &out ) const {
+void G13_Stick::dump( std::ostream &out ) const {
 	BOOST_FOREACH( const G13_StickZone &zone, _zones ) {
-		zone.display( out );
+		zone.dump( out );
 		out << endl;
 	}
 }
 
-void G13_StickZone::display( std::ostream & out ) const {
+void G13_StickZone::dump( std::ostream & out ) const {
 	out << "   " << setw(20) << name() << "   " << _bounds << "  ";
 	if( action() ) {
-		action()->display( out );
+		action()->dump( out );
 	} else {
 		out << " (no action)";
 	}

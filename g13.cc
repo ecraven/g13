@@ -323,9 +323,8 @@ G13_Device::G13_Device(G13_Manager &manager, libusb_device_handle *handle,
 		_uinput_fid(-1),
 		ctx(0)
 {
-	_current_profile = ProfilePtr(new G13_Profile(*this));
+	_current_profile = ProfilePtr(new G13_Profile(*this, "default"));
 	_profiles["default"] = _current_profile;
-
 
 
 	for (int i = 0; i < sizeof(keys); i++)
@@ -352,7 +351,7 @@ void G13_Device::switch_to_profile(const std::string &name) {
 ProfilePtr G13_Device::profile(const std::string &name) {
 	ProfilePtr rv = _profiles[name];
 	if (!rv) {
-		rv = ProfilePtr(new G13_Profile(*_current_profile));
+		rv = ProfilePtr(new G13_Profile(*_current_profile, name));
 		_profiles[name] = rv;
 	}
 	return rv;
@@ -396,7 +395,7 @@ void G13_Action_Keys::act(G13_Device &g13, bool is_down) {
 	}
 }
 
-void G13_Action_Keys::display( std::ostream &out ) const {
+void G13_Action_Keys::dump( std::ostream &out ) const {
 	out << " SEND KEYS: ";
 
 	for( size_t i = 0; i < _keys.size(); i++ ) {
@@ -418,7 +417,7 @@ void G13_Action_PipeOut::act(G13_Device &kp, bool is_down) {
 	}
 }
 
-void G13_Action_PipeOut::display( std::ostream &o ) const {
+void G13_Action_PipeOut::dump( std::ostream &o ) const {
 	o << "WRITE PIPE : " << repr( _out );
 }
 
@@ -436,7 +435,7 @@ void G13_Action_Command::act(G13_Device &kp, bool is_down) {
 	}
 }
 
-void G13_Action_Command::display( std::ostream &o ) const {
+void G13_Action_Command::dump( std::ostream &o ) const {
 	o << "COMMAND : " << repr( _cmd );
 }
 
@@ -455,19 +454,26 @@ G13_ActionPtr G13_Device::make_action(const std::string &action) {
 }
 
 // *************************************************************************
+void G13_Device::dump(std::ostream &o, int detail ) {
+	o << "G13 id=" << id_within_manager() << endl;
+	o << "   input_pipe_name=" << repr( _input_pipe_name ) << endl;
+	o << "   output_pipe_name=" << repr( _output_pipe_name ) << endl;
+	o << "   current_profile=" << _current_profile->name() << endl;
+	o << "   current_font=" << _current_font->name() << std::endl;
 
-typedef const char * CCP;
-static const char *advance(CCP &source, std::string &dest) {
-	const char *space = source ? strchr(source, ' ') : 0;
-	if (space) {
-		dest = std::string(source, space - source);
-		source = space + 1;
-	} else {
-		dest = source;
-		source = 0;
+	if( detail > 0 ) {
+		o << "STICK" << std::endl;
+		stick().dump( o );
+		if( detail == 1 ) {
+			_current_profile->dump(o);
+		} else {
+			for( auto i = _profiles.begin(); i != _profiles.end(); i++ ) {
+				i->second->dump(o);
+			}
+		}
 	}
-	return source;
 }
+
 
 void G13_Device::command(char const *str) {
 	int red, green, blue, mod, row, col;
@@ -478,9 +484,10 @@ void G13_Device::command(char const *str) {
 	const char *remainder = str;
 
 	try {
+		using Helper::advance_ws;
 
 		std::string cmd;
-		advance(remainder, cmd);
+		advance_ws(remainder, cmd);
 
 		if (remainder) {
 			if (cmd == "out") {
@@ -494,7 +501,7 @@ void G13_Device::command(char const *str) {
 
 			} else if (cmd == "bind") {
 				std::string keyname;
-				advance(remainder, keyname);
+				advance_ws(remainder, keyname);
 				std::string action = remainder;
 				try {
 					if (auto key = _current_profile->find_key(keyname)) {
@@ -538,8 +545,8 @@ void G13_Device::command(char const *str) {
 				}
 			} else if (cmd == "stickzone") {
 				std::string operation, zonename;
-				advance(remainder, operation);
-				advance(remainder, zonename);
+				advance_ws(remainder, operation);
+				advance_ws(remainder, zonename);
 				if (operation == "add") {
 					G13_StickZone *zone = _stick.zone(zonename, true);
 				} else {
@@ -562,6 +569,19 @@ void G13_Device::command(char const *str) {
 					}
 
 				}
+			} else if( cmd == "dump" ) {
+				std::string target;
+				advance_ws(remainder,target);
+				if( target == "all" ) {
+					dump(std::cout, 3);
+				} else if( target == "current" ) {
+					dump(std::cout, 1);
+				} else if( target == "summary" ) {
+					dump(std::cout, 0);
+				} else {
+					cerr << "unknown dump target: <" << target << ">" << endl;
+				}
+
 			} else {
 				cerr << "unknown command: <" << str << ">" << endl;
 			}
@@ -581,40 +601,13 @@ void G13_Device::command(char const *str) {
 	}
 	return;
 
-	if (sscanf(str, "rgb %i %i %i", &red, &green, &blue) == 3) {
-		set_key_color(red, green, blue);
-	} else if (sscanf(str, "mod %i", &mod) == 1) {
-		set_mode_leds(mod);
-	} else if (sscanf(str, "image %i %i", &red, &green) == 2) {
-		lcd().image_test(red, green);
-	} else if (sscanf(str, "write_char %c %i %i", &c, &row, &col) == 3) {
-		lcd().write_char(c, row, col);
-	} else if (sscanf(str, "pos %i %i", &row, &col) == 2) {
-		lcd().write_pos(row, col);
-	} else if (sscanf(str, "write_char %c", &c) == 1) {
-		lcd().write_char(c);
-	} else if (!strncmp(str, "out ", 4)) {
-		lcd().write_string(str + 4);
-	} else if (!strncmp(str, "clear", 5)) {
-		lcd().image_clear();
-		lcd().image_send();
-	} else if (sscanf(str, "textmode %i", &mod) == 1) {
-		lcd().text_mode = mod;
-	} else if (!strncmp(str, "refresh", 6)) {
-		lcd().image_send();
-	} else if (sscanf(str, "profile %255s", binding) == 1) {
-		switch_to_profile(binding);
-	} else if (sscanf(str, "font %255s", binding) == 1) {
-		switch_to_font(binding);
-	} else {
-		cerr << "unknown command: <" << str << ">" << endl;
-	}
 }
 
 G13_Manager::G13_Manager() :
 		ctx(0), devs(0) {
 }
 
+// *************************************************************************
 
 
 
@@ -701,7 +694,7 @@ int G13_Manager::run() {
 		g13s[0]->write_lcd_file( logo_filename );
 	}
 	std::cout << "Active Stick zones " << std::endl;
-	g13s[0]->stick().display_zones(std::cout);
+	g13s[0]->stick().dump(std::cout);
 
 	std::string config_fn = string_config_value( "config" );
 	std::cout << "config_fn = " << config_fn << std::endl;

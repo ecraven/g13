@@ -96,8 +96,6 @@ inline VAL_T &find_or_throw( std::map<KEY_T,VAL_T> &m, const KEY_T &target ) {
 };
 
 
-
-
 // *************************************************************************
 
 template <class T>
@@ -144,6 +142,20 @@ std::ostream &operator<<( std::ostream &o, const Bounds<T> &b ) {
 	return o;
 };
 
+// *************************************************************************
+
+typedef const char * CCP;
+inline const char *advance_ws(CCP &source, std::string &dest) {
+	const char *space = source ? strchr(source, ' ') : 0;
+	if (space) {
+		dest = std::string(source, space - source);
+		source = space + 1;
+	} else {
+		dest = source;
+		source = 0;
+	}
+	return source;
+}
 }; // namespace Helper
 
 

@@ -4,6 +4,13 @@
 
 Make sure you have boost and libusb-1.0 installed.
 
+### For Ubuntu (15.10)
+
+* ***sudo apt-get install libusb-1.0-0-dev***
+* ***sudo apt-get install libboost-all-dev***
+
+
+### Build
 Compile by running
 
     make
@@ -159,6 +166,10 @@ All key binding changes (from the bind command) are made on the current profile.
 ### font *font_name*   
 
 Switch font, current options are ***8x8*** and ***5x8***    
+
+### dump *all|current|summary*
+
+Dumps G13 configuration info to g13d console
 
 ### LCD display
 
