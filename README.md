@@ -62,6 +62,7 @@ Commands can be loaded from a file specified by the --config option on the comma
 
 Commands can be also be sent to the command input pipe, which is at ***/tmp/g13-0*** by 
 default. Example:
+
     ***echo rgb 0 255 0 > /tmp/g13-0***
 
 ### Actions
@@ -107,6 +108,7 @@ CALNORTH   | calibrate stick north
 defines zones to be used when the stick is in KEYS mode
 
 Where *operation* can be
+
 operation | what it does
 ----------|----------------
 add       | add a new zone named *zonename*
