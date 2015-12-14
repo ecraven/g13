@@ -566,6 +566,8 @@ void G13_Device::command(char const *str) {
 
 					} else if (operation == "del") {
 						_stick.remove_zone(*zone);
+					} else {
+						cerr << "unknown stickzone operation: <" << operation << ">" << endl;
 					}
 
 				}
