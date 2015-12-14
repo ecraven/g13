@@ -63,15 +63,15 @@ Commands can be loaded from a file specified by the --config option on the comma
 Commands can be also be sent to the command input pipe, which is at ***/tmp/g13-0*** by 
 default. Example:
 
-    ***echo rgb 0 255 0 > /tmp/g13-0***
+    echo rgb 0 255 0 > /tmp/g13-0
 
 ### Actions
 
 Various parts of configuring the G13 depend on assigning actions to occur based on something happening to the G13. 
 * key, possible values shown upon startup  (e.g. ***KEY_LEFTSHIFT***).
-* multiple keys,  like ***KEY_LEFTSHIFT+KEY_F1**
-* pipe output, by using ">" followed by text, as in ***>Hello*** - causing "Hello\n" to be written to the output pipe ( /tmp/g13-0_out )
-* ommand, by using "!" followed by text, as in ***!stick_mode KEYS*** 
+* multiple keys,  like ***KEY_LEFTSHIFT+KEY_F1***
+* pipe output, by using ">" followed by text, as in ***>Hello*** - causing **Hello** (plus newline) to be written to the output pipe ( **/tmp/g13-0_out** by default )
+* command, by using "!" followed by text, as in ***!stick_mode KEYS*** 
 
 ## Commands
 
@@ -123,6 +123,7 @@ stick enters the boundary area, the zone's action ***down*** activity will be fi
 action ***up*** activity will be fired.  
 
 Example:
+
     stickzone add TheBottomLeft
     stickzone bounds TheBottomLeft 0.0 0.9 0.1 1.0
     stickzone action KEY_END
@@ -157,7 +158,7 @@ All key binding changes (from the bind command) are made on the current profile.
   
 ### font *font_name*   
 
-Switch font, current options are 8x8 and 5x8    
+Switch font, current options are ***8x8*** and ***5x8***    
 
 ### LCD display
 
