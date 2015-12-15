@@ -201,20 +201,17 @@ std::string G13_Manager::find_g13_key_name( G13_KEY_INDEX v ) const {
 		return "(unknown G13 key)";
 	}
 }
+
+
+
 void G13_Manager::display_keys() {
 
 	typedef std::map<std::string, int> mapType;
-	std::cout << "Known keys on G13:" << std::endl;
-	BOOST_FOREACH(const mapType::value_type &item, g13_name_to_key) {
-		std::cout << item.first << " ";
-	}
-	std::cout << std::endl;
+	G13_OUT( "Known keys on G13:" );
+	G13_OUT( Helper::map_keys_out( g13_name_to_key ) );
 
-	std::cout << "Known keys to map to:" << std::endl;
-	BOOST_FOREACH(const mapType::value_type &item, input_name_to_key) {
-		std::cout << item.first << " ";
-	}
-	std::cout << std::endl;
+	G13_OUT( "Known keys to map to:" );
+	G13_OUT( Helper::map_keys_out( input_name_to_key) );
 
 }
 

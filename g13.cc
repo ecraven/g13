@@ -1,6 +1,10 @@
 #include "g13.h"
 #include "logo.h"
 #include <fstream>
+
+#include <boost/log/sources/severity_feature.hpp>
+#include <boost/log/sources/severity_logger.hpp>
+
 using namespace std;
 
 // *************************************************************************
@@ -33,7 +37,7 @@ void G13_Device::set_mode_leds(int leds) {
 			LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 9, 0x305, 0,
 			usb_data, 5, 1000);
 	if (r != 5) {
-		cerr << "Problem sending data" << endl;
+		G13_LOG( error, "Problem sending data" );
 		return;
 	}
 }
@@ -48,7 +52,7 @@ void G13_Device::set_key_color(int red, int green, int blue) {
 			LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE, 9, 0x307, 0,
 			usb_data, 5, 1000);
 	if (error != 5) {
-		cerr << "Problem sending data" << endl;
+		G13_LOG( error, "Problem sending data" );
 		return;
 	}
 }
@@ -61,22 +65,23 @@ void G13_Manager::discover_g13s(libusb_device **devs, ssize_t count,
 		libusb_device_descriptor desc;
 		int r = libusb_get_device_descriptor(devs[i], &desc);
 		if (r < 0) {
-			cout << "Failed to get device descriptor" << endl;
+			G13_LOG( error, "Failed to get device descriptor" );
 			return;
 		}
 		if (desc.idVendor == G13_VENDOR_ID && desc.idProduct == G13_PRODUCT_ID) {
 			libusb_device_handle *handle;
 			int r = libusb_open(devs[i], &handle);
 			if (r != 0) {
-				cerr << "Error opening G13 device" << endl;
+				G13_LOG( error, "Error opening G13 device" );
 				return;
 			}
 			if (libusb_kernel_driver_active(handle, 0) == 1)
 				if (libusb_detach_kernel_driver(handle, 0) == 0)
-					cout << "Kernel driver detached" << endl;
+					G13_LOG( info, "Kernel driver detached" );
+
 			r = libusb_claim_interface(handle, 0);
 			if (r < 0) {
-				cerr << "Cannot Claim Interface" << endl;
+				G13_LOG( error, "Cannot Claim Interface" );
 				return;
 			}
 			g13s.push_back(new G13_Device(*this, handle, g13s.size()));
@@ -104,16 +109,16 @@ int g13_create_uinput(G13_Device *g13) {
 			access("/dev/input/uinput", F_OK) == 0 ? "/dev/input/uinput" :
 			access("/dev/uinput", F_OK) == 0 ? "/dev/uinput" : 0;
 	if (!dev_uinput_fname) {
-		cerr << "Could not find an uinput device" << endl;
+		G13_LOG( error, "Could not find an uinput device" );
 		return -1;
 	}
 	if (access(dev_uinput_fname, W_OK) != 0) {
-		cerr << dev_uinput_fname << " doesn't grant write permissions" << endl;
+		G13_LOG( error, dev_uinput_fname << " doesn't grant write permissions" );
 		return -1;
 	}
 	int ufile = open(dev_uinput_fname, O_WRONLY | O_NDELAY);
 	if (ufile <= 0) {
-		cerr << "Could not open uinput" << endl;
+		G13_LOG( error, "Could not open uinput" );
 		return -1;
 	}
 	memset(&uinp, 0, sizeof(uinp));
@@ -146,12 +151,12 @@ int g13_create_uinput(G13_Device *g13) {
 
 	int retcode = write(ufile, &uinp, sizeof(uinp));
 	if (retcode < 0) {
-		cerr << "Could not write to uinput device (" << retcode << ")" << endl;
+		G13_LOG( error, "Could not write to uinput device (" << retcode << ")" );
 		return -1;
 	}
 	retcode = ioctl(ufile, UI_DEV_CREATE);
 	if (retcode) {
-		cerr << "Error creating uinput device for G13" << endl;
+		G13_LOG( error, "Error creating uinput device for G13" );
 		return -1;
 	}
 	return ufile;
@@ -180,7 +185,7 @@ void G13_Device::register_context(libusb_context *_ctx) {
 	_output_pipe_fid = g13_create_fifo(_output_pipe_name.c_str());
 
 	if ( _input_pipe_fid == -1 ) {
-		cerr << "failed opening pipe" << endl;
+		G13_LOG( error, "failed opening pipe" );
 	}
 }
 
@@ -194,7 +199,7 @@ void G13_Device::cleanup() {
 }
 
 void G13_Manager::cleanup() {
-	cout << "cleaning up" << endl;
+	G13_LOG( info, "cleaning up" );
 	for (int i = 0; i < g13s.size(); i++) {
 		g13s[i]->cleanup();
 		delete g13s[i];
@@ -237,9 +242,9 @@ int G13_Device::read_keys() {
 
 	if (error && error != LIBUSB_ERROR_TIMEOUT) {
 
-		cerr << "Error while reading keys: " << error << " ("
-				<< describe_libusb_error_code(error) << ")" << endl;
-		//    cerr << "Stopping daemon" << endl;
+		G13_LOG( error, "Error while reading keys: " << error << " ("
+				<< describe_libusb_error_code(error) << ")" );
+		//    G13_LOG( error, "Stopping daemon" );
 		//    return -1;
 	}
 	if (size == G13_REPORT_SIZE) {
@@ -254,7 +259,7 @@ int G13_Device::read_keys() {
 void G13_Device::read_config_file( const std::string &filename ) {
 	std::ifstream s( filename );
 
-	std::cout << "reading configuration from " << filename << std::endl;
+	G13_LOG( info, "reading configuration from " << filename );
 	while( s.good() ) {
 
 		// grab a line
@@ -273,7 +278,7 @@ void G13_Device::read_config_file( const std::string &filename ) {
 
 		// send it
 		if( buf[0] ) {
-			std::cout << "  cfg: " << buf << std::endl;
+			G13_LOG( info, "  cfg: " << buf );
 			command( buf );
 		}
 	}
@@ -292,20 +297,21 @@ void G13_Device::read_commands() {
 		unsigned char buf[1024 * 1024];
 		memset(buf, 0, 1024 * 1024);
 		ret = read(_input_pipe_fid, buf, 1024 * 1024);
-		//    std::cout << "INFO: read " << ret << " characters" << std::endl;
+		G13_LOG( trace, "read " << ret << " characters" );
+
 		if (ret == 960) { // TODO probably image, for now, don't test, just assume image
 			lcd().image(buf, ret);
 		} else {
 			std::string buffer = reinterpret_cast<const char*>(buf);
 			std::vector<std::string> lines;
 			boost::split(lines, buffer, boost::is_any_of("\n\r"));
-			//      std::cout << "INFO: lines: " << lines.size() << std::endl;
+
 			BOOST_FOREACH(std::string const &cmd, lines) {
 				std::vector<std::string> command_comment;
 				boost::split(command_comment, cmd, boost::is_any_of("#"));
-				//        std::cout << "INFO: command [" << command.size() << "]: " << command[0] << " (" << command[0].size() << ")" << std::endl;
+
 				if (command_comment.size() > 0 && command_comment[0] != std::string("")) {
-					cout << "command: " << command_comment[0] << endl;
+					G13_LOG( info,  "command: " << command_comment[0] );
 					command(command_comment[0].c_str());
 				}
 			}
@@ -489,6 +495,12 @@ void G13_Device::command(char const *str) {
 		std::string cmd;
 		advance_ws(remainder, cmd);
 
+		#define RETURN_FAIL( message )					\
+			{ 											\
+				G13_LOG( error, message );				\
+				return;									\
+			}											\
+
 		if (remainder) {
 			if (cmd == "out") {
 				lcd().write_string(remainder);
@@ -496,7 +508,7 @@ void G13_Device::command(char const *str) {
 				if (sscanf(str, "pos %i %i", &row, &col) == 2) {
 					lcd().write_pos(row, col);
 				} else {
-					cerr << "bad pos : " << str << endl;
+					RETURN_FAIL( "bad pos : " << str );
 				}
 
 			} else if (cmd == "bind") {
@@ -509,12 +521,11 @@ void G13_Device::command(char const *str) {
 					} else if (auto stick_key = _stick.zone(keyname)) {
 						stick_key->set_action( make_action(action) );
 					} else {
-						cerr << "bind " << keyname << " unknown" << endl;
+						RETURN_FAIL( "bind key " << keyname << " unknown" );
 					}
-					//cout << "bind " << keyname << " [" << action << "]" << endl;
+					G13_LOG( trace,  "bind " << keyname << " [" << action << "]" );
 				} catch (const std::exception &ex) {
-					cerr << "bind " << keyname << " " << action << " failed : "
-							<< ex.what() << endl;
+					RETURN_FAIL( "bind " << keyname << " " << action << " failed : " << ex.what() );
 				}
 			} else if (cmd == "profile") {
 				switch_to_profile(remainder);
@@ -528,7 +539,7 @@ void G13_Device::command(char const *str) {
 				if (sscanf(str, "rgb %i %i %i", &red, &green, &blue) == 3) {
 					set_key_color(red, green, blue);
 				} else {
-					cerr << "rgb bad format: <" << str << ">" << endl;
+					RETURN_FAIL( "rgb bad format: <" << str << ">" );
 				}
 			} else if (cmd == "stickmode") {
 
@@ -541,7 +552,7 @@ void G13_Device::command(char const *str) {
 
 				BOOST_PP_SEQ_FOR_EACH( STICKMODE_TEST, _,
 						(ABSOLUTE)(RELATIVE)(KEYS)(CALCENTER)(CALBOUNDS)(CALNORTH) ) {
-					cerr << "unknown stick mode : <" << mode << ">" << endl;
+					RETURN_FAIL( "unknown stick mode : <" << mode << ">" );
 				}
 			} else if (cmd == "stickzone") {
 				std::string operation, zonename;
@@ -567,7 +578,7 @@ void G13_Device::command(char const *str) {
 					} else if (operation == "del") {
 						_stick.remove_zone(*zone);
 					} else {
-						cerr << "unknown stickzone operation: <" << operation << ">" << endl;
+						RETURN_FAIL( "unknown stickzone operation: <" << operation << ">" );
 					}
 
 				}
@@ -581,11 +592,11 @@ void G13_Device::command(char const *str) {
 				} else if( target == "summary" ) {
 					dump(std::cout, 0);
 				} else {
-					cerr << "unknown dump target: <" << target << ">" << endl;
+					RETURN_FAIL( "unknown dump target: <" << target << ">" );
 				}
 
 			} else {
-				cerr << "unknown command: <" << str << ">" << endl;
+				RETURN_FAIL( "unknown command: <" << str << ">" );
 			}
 		} else {
 			if (cmd == "refresh") {
@@ -594,12 +605,12 @@ void G13_Device::command(char const *str) {
 				lcd().image_clear();
 				lcd().image_send();
 			} else {
-				cerr << "unknown command: <" << str << ">" << endl;
+				RETURN_FAIL( "unknown command: <" << str << ">" );
 			}
 
 		}
 	} catch (const std::exception &ex) {
-		cerr << "command failed : " << ex.what() << endl;
+		RETURN_FAIL( "command failed : " << ex.what() );
 	}
 	return;
 
@@ -628,7 +639,7 @@ std::string G13_Manager::string_config_value( const std::string &name ) const {
 	}
 }
 void G13_Manager::set_string_config_value( const std::string &name, const std::string &value ) {
-	std::cout << "set_string_config_value " << name << " = " << repr(value) << std::endl;
+	G13_LOG( info, "set_string_config_value " << name << " = " << repr(value) );
 	_string_config_values[name] = value;
 }
 
@@ -667,40 +678,38 @@ int G13_Manager::run() {
 
 	ret = libusb_init(&ctx);
 	if (ret < 0) {
-		cout << "Initialization error: " << ret << endl;
+		G13_LOG( error, "Initialization error: " << ret );
 		return 1;
 	}
 
 	libusb_set_debug(ctx, 3);
 	cnt = libusb_get_device_list(ctx, &devs);
 	if (cnt < 0) {
-		cout << "Error while getting device list" << endl;
+		G13_LOG( error, "Error while getting device list" );
 		return 1;
 	}
 
 	discover_g13s(devs, cnt, g13s);
 	libusb_free_device_list(devs, 1);
-	cout << "Found " << g13s.size() << " G13s" << endl;
+	G13_LOG( info, "Found " << g13s.size() << " G13s" );
 	if (g13s.size() == 0) {
 		return 1;
 	}
 
-	std::cout << std::endl;
-
 	for (int i = 0; i < g13s.size(); i++) {
-		// register_g13(ctx, g13s[i]);
 		g13s[i]->register_context(ctx);
 	}
 	signal(SIGINT, set_stop);
 	if (g13s.size() > 0 && logo_filename.size()) {
 		g13s[0]->write_lcd_file( logo_filename );
 	}
-	std::cout << "Active Stick zones " << std::endl;
+
+	G13_LOG( info,  "Active Stick zones " );
 	g13s[0]->stick().dump(std::cout);
 
 	std::string config_fn = string_config_value( "config" );
-	std::cout << "config_fn = " << config_fn << std::endl;
 	if( config_fn.size() ) {
+		G13_LOG( info,  "config_fn = " << config_fn );
 		g13s[0]->read_config_file( config_fn );
 	}
 

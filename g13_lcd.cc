@@ -27,14 +27,14 @@ namespace G13 {
 void G13_Device::init_lcd() {
   int error = libusb_control_transfer(handle, 0, 9, 1, 0, 0, 0, 1000);
   if(error) {
-    cerr << "Error when initializing lcd endpoint" << endl;
+    G13_LOG( error,  "Error when initializing lcd endpoint" );
   }
 }
 
 void G13_Device::write_lcd( unsigned char *data, size_t size ) {
   init_lcd();
   if(size != G13_LCD_BUFFER_SIZE) {
-    cerr << "Invalid LCD data size " << size << ", should be " << G13_LCD_BUFFER_SIZE;
+	G13_LOG( error, "Invalid LCD data size " << size << ", should be " << G13_LCD_BUFFER_SIZE );
     return;
   }
   unsigned char buffer[G13_LCD_BUFFER_SIZE + 32];
@@ -44,7 +44,7 @@ void G13_Device::write_lcd( unsigned char *data, size_t size ) {
   int bytes_written;
   int error = libusb_interrupt_transfer(handle, LIBUSB_ENDPOINT_OUT | G13_LCD_ENDPOINT, buffer, G13_LCD_BUFFER_SIZE + 32, &bytes_written, 1000);
   if(error)
-    cerr << "Error when transferring image: " << error << ", " << bytes_written << " bytes written" << endl;
+	  G13_LOG( error, "Error when transferring image: " << error << ", " << bytes_written << " bytes written" );
 }
 
 void G13_Device::write_lcd_file( const string &filename ) {
@@ -81,8 +81,7 @@ void G13_LCD::image_setpixel(unsigned row, unsigned col) {
 	unsigned char mask = 1 << ((row) & 7);
 
 	if (offset >= G13_LCD_BUF_SIZE) {
-		std::cerr << "bad offset " << offset << " for " << (row) << " x "
-				<< (col) << std::endl;
+		G13_LOG( error, "bad offset " << offset << " for " << (row) << " x " << (col) );
 		return;
 	}
 
@@ -95,8 +94,7 @@ void G13_LCD::image_clearpixel(unsigned row, unsigned col) {
 	unsigned char mask = 1 << ((row) & 7);
 
 	if (offset >= G13_LCD_BUF_SIZE) {
-		std::cerr << "bad offset " << offset << " for " << (row) << " x "
-				<< (col) << std::endl;
+		G13_LOG( error, "bad offset " << offset << " for " << (row) << " x " << (col) );
 		return;
 	}
 	image_buf[offset] &= ~mask;
@@ -135,7 +133,7 @@ void G13_LCD::write_char( char c, int row, int col ) {
 }
 
 void G13_LCD::write_string( const char *str ) {
-	std::cout << "writing \"" << str << "\"" << std::endl;
+	G13_LOG( info, "writing \"" << str << "\"" );
 	while( *str ) {
 		if( *str == '\n' ) {
 			cursor_col = 0;

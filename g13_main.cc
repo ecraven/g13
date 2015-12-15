@@ -1,12 +1,24 @@
 #include "g13.h"
 
 #include <boost/program_options.hpp>
+#include <boost/log/core/core.hpp>
+#include <boost/log/attributes.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/log/utility/setup.hpp>
+#include <boost/log/utility/setup/console.hpp>
+#include <boost/log/expressions/formatters/stream.hpp>
+#include <boost/log/support/date_time.hpp>
 
 using namespace std;
 using namespace G13;
 namespace po = boost::program_options;
 
 int main(int argc, char *argv[]) {
+    boost::log::core::get()->set_filter
+    (
+    		boost::log::trivial::severity >= boost::log::trivial::info
+    );
 
 	G13_Manager manager;
 

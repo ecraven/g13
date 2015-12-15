@@ -114,9 +114,6 @@ G13_StickZone::G13_StickZone( G13_Stick &stick, const std::string &name,  const 
 {
 	set_action( action );
 
-	//std::cout << "created new StickZone : ";
-	//display( std::cout );
-	//std::cout << std::endl;
 }
 
 void G13_Stick::parse_joystick(unsigned char *buf) {
@@ -160,12 +157,12 @@ void G13_Stick::parse_joystick(unsigned char *buf) {
 		dy = 1.0 - dy;
 	}
 
-	// cerr << "x=" << _current_pos.x << " y=" << _current_pos.y << " dx=" << dx << " dy=" << dy << std::endl;
+	G13_LOG( trace, "x=" << _current_pos.x << " y=" << _current_pos.y << " dx=" << dx << " dy=" << dy );
 	G13_ZoneCoord jpos(dx, dy);
 	if (_stick_mode == STICK_ABSOLUTE) {
 		_keypad.send_event( EV_ABS, ABS_X, _current_pos.x );
 		_keypad.send_event( EV_ABS, ABS_Y, _current_pos.y );
-		// cout << "send absolute mouse " << _current_pos.x << " x " << _current_pos.y << endl;
+
 	} else if (_stick_mode == STICK_KEYS) {
 
 		BOOST_FOREACH( G13_StickZone &zone, _zones ) {

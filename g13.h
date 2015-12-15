@@ -4,6 +4,8 @@
 
 #include "helper.hpp"
 
+#include <boost/log/trivial.hpp>
+
 #include <libusb-1.0/libusb.h>
 
 #include <sys/stat.h>
@@ -19,6 +21,8 @@
 
 namespace G13 {
 
+#define G13_LOG( level, message ) BOOST_LOG_TRIVIAL( level ) << message
+#define G13_OUT( message ) BOOST_LOG_TRIVIAL( info ) << message
 
 const size_t G13_INTERFACE = 0;
 const size_t G13_KEY_ENDPOINT = 1;
