@@ -171,6 +171,10 @@ Switch font, current options are ***8x8*** and ***5x8***
 
 Dumps G13 configuration info to g13d console
 
+### log_level *trace|debug|info|warning|error|fatal*
+
+Changes the level of detail written to the g13d console 
+
 ### LCD display
 
 Use pbm2lpbm to convert a pbm image to the correct format, then just cat that into the pipe (cat starcraft2.lpbm > /tmp/g13-0).

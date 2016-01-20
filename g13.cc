@@ -2,8 +2,18 @@
 #include "logo.h"
 #include <fstream>
 
+#if 0
 #include <boost/log/sources/severity_feature.hpp>
 #include <boost/log/sources/severity_logger.hpp>
+#include <boost/log/core/core.hpp>
+#include <boost/log/attributes.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/expressions.hpp>
+#include <boost/log/utility/setup.hpp>
+#include <boost/log/utility/setup/console.hpp>
+#include <boost/log/expressions/formatters/stream.hpp>
+#include <boost/log/support/date_time.hpp>
+#endif
 
 using namespace std;
 
@@ -339,6 +349,7 @@ G13_Device::G13_Device(G13_Manager &manager, libusb_device_handle *handle,
 	lcd().image_clear();
 
 	_init_fonts();
+	_init_commands();
 }
 
 FontPtr G13_Device::switch_to_font(const std::string &name) {
@@ -392,10 +403,12 @@ void G13_Action_Keys::act(G13_Device &g13, bool is_down) {
 	if (is_down) {
 		for (int i = 0; i < _keys.size(); i++) {
 			g13.send_event( EV_KEY, _keys[i], is_down);
+			G13_LOG( trace, "sending KEY DOWN " << _keys[i] );
 		}
 	} else {
 		for (int i = _keys.size() - 1; i >= 0; i--) {
 			g13.send_event( EV_KEY, _keys[i], is_down);
+			G13_LOG( trace, "sending KEY UP " << _keys[i] );
 		}
 
 	}
@@ -460,6 +473,7 @@ G13_ActionPtr G13_Device::make_action(const std::string &action) {
 }
 
 // *************************************************************************
+
 void G13_Device::dump(std::ostream &o, int detail ) {
 	o << "G13 id=" << id_within_manager() << endl;
 	o << "   input_pipe_name=" << repr( _input_pipe_name ) << endl;
@@ -481,12 +495,171 @@ void G13_Device::dump(std::ostream &o, int detail ) {
 }
 
 
-void G13_Device::command(char const *str) {
-	int red, green, blue, mod, row, col;
+// *************************************************************************
+
+#define RETURN_FAIL( message )					\
+	{ 											\
+		G13_LOG( error, message );				\
+		return;									\
+	}											\
+
+struct command_adder {
+	command_adder( G13_Device::CommandFunctionTable & t, const char *name ) : _t(t), _name(name) {}
+
+	G13_Device::CommandFunctionTable &_t;
+	std::string _name;
+	command_adder & operator +=( G13_Device::COMMAND_FUNCTION f ) {
+		_t[_name] = f;
+		return *this;
+	};
+};
+
+#define G13_DEVICE_COMMAND( name )											\
+	;																		\
+	command_adder BOOST_PP_CAT(add_, name )( _command_table,				\
+		BOOST_PP_STRINGIZE(name) );											\
+	BOOST_PP_CAT(add_, name ) += 											\
+			[this]( const char *remainder )									\
+
+
+void G13_Device::_init_commands() {
+
+
+	using Helper::advance_ws;
+
+
+	G13_DEVICE_COMMAND( out ) {
+		lcd().write_string(remainder);
+	}
+
+
+	G13_DEVICE_COMMAND( pos ) {
+		int row, col;
+		if (sscanf(remainder, "%i %i", &row, &col) == 2) {
+			lcd().write_pos(row, col);
+		} else {
+			RETURN_FAIL( "bad pos : " << remainder );
+		}
+	}
+
+	G13_DEVICE_COMMAND( bind ) {
+		std::string keyname;
+		advance_ws(remainder, keyname);
+		std::string action = remainder;
+		try {
+			if (auto key = _current_profile->find_key(keyname)) {
+				key->set_action( make_action(action) );
+			} else if (auto stick_key = _stick.zone(keyname)) {
+				stick_key->set_action( make_action(action) );
+			} else {
+				RETURN_FAIL( "bind key " << keyname << " unknown" );
+			}
+			G13_LOG( trace,  "bind " << keyname << " [" << action << "]" );
+		} catch (const std::exception &ex) {
+			RETURN_FAIL( "bind " << keyname << " " << action << " failed : " << ex.what() );
+		}
+	}
+
+	G13_DEVICE_COMMAND( profile ) {
+		switch_to_profile(remainder);
+	}
+
+	G13_DEVICE_COMMAND( font ) {
+		switch_to_font(remainder);
+	}
+	G13_DEVICE_COMMAND( mod ) {
+		set_mode_leds(atoi(remainder));
+	}
+	G13_DEVICE_COMMAND( textmode ) {
+		lcd().text_mode = atoi(remainder);
+	}
+
+	G13_DEVICE_COMMAND( rgb ) {
+		int red, green, blue;
+		if (sscanf(remainder, "%i %i %i", &red, &green, &blue) == 3) {
+			set_key_color(red, green, blue);
+		} else {
+			RETURN_FAIL( "rgb bad format: <" << remainder << ">" );
+		}
+	}
+
+	G13_DEVICE_COMMAND( stickmode ) {
+
+		std::string mode = remainder;
+		#define STICKMODE_TEST( r, data, elem )							\
+			if( mode == BOOST_PP_STRINGIZE(elem) ) {					\
+				_stick.set_mode( BOOST_PP_CAT( STICK_, elem ) );		\
+				return;													\
+			} else														\
+
+		BOOST_PP_SEQ_FOR_EACH( STICKMODE_TEST, _,
+				(ABSOLUTE)(RELATIVE)(KEYS)(CALCENTER)(CALBOUNDS)(CALNORTH) ) {
+			RETURN_FAIL( "unknown stick mode : <" << mode << ">" );
+		}
+	}
+
+	G13_DEVICE_COMMAND( stickzone ) {
+		std::string operation, zonename;
+		advance_ws(remainder, operation);
+		advance_ws(remainder, zonename);
+		if (operation == "add") {
+			G13_StickZone *zone = _stick.zone(zonename, true);
+		} else {
+			G13_StickZone *zone = _stick.zone(zonename);
+			if (!zone) {
+				throw G13_CommandException("unknown stick zone");
+			}
+			if (operation == "action") {
+				zone->set_action( make_action(remainder) );
+			} else if (operation == "bounds") {
+				double x1, y1, x2, y2;
+				if (sscanf(remainder, "%lf %lf %lf %lf", &x1, &y1, &x2,
+						&y2) != 4) {
+					throw G13_CommandException("bad bounds format");
+				}
+				zone->set_bounds( G13_ZoneBounds(x1, y1, x2, y2) );
+
+			} else if (operation == "del") {
+				_stick.remove_zone(*zone);
+			} else {
+				RETURN_FAIL( "unknown stickzone operation: <" << operation << ">" );
+			}
+		}
+	}
+
+	G13_DEVICE_COMMAND( dump ) {
+		std::string target;
+		advance_ws(remainder,target);
+		if( target == "all" ) {
+			dump(std::cout, 3);
+		} else if( target == "current" ) {
+			dump(std::cout, 1);
+		} else if( target == "summary" ) {
+			dump(std::cout, 0);
+		} else {
+			RETURN_FAIL( "unknown dump target: <" << target << ">" );
+		}
+	}
+
+	G13_DEVICE_COMMAND( log_level ) {
+		std::string level;
+		advance_ws(remainder,level);
+		manager().set_log_level(level);
+	}
+
+	G13_DEVICE_COMMAND( refresh ) {
+		lcd().image_send();
+	}
+
+	G13_DEVICE_COMMAND( clear ) {
+		lcd().image_clear();
+		lcd().image_send();
+	}
+
 	;
-	char keyname[256];
-	char binding[256];
-	char c;
+}
+
+void G13_Device::command(char const *str) {
 	const char *remainder = str;
 
 	try {
@@ -495,125 +668,17 @@ void G13_Device::command(char const *str) {
 		std::string cmd;
 		advance_ws(remainder, cmd);
 
-		#define RETURN_FAIL( message )					\
-			{ 											\
-				G13_LOG( error, message );				\
-				return;									\
-			}											\
 
-		if (remainder) {
-			if (cmd == "out") {
-				lcd().write_string(remainder);
-			} else if (cmd == "pos") {
-				if (sscanf(str, "pos %i %i", &row, &col) == 2) {
-					lcd().write_pos(row, col);
-				} else {
-					RETURN_FAIL( "bad pos : " << str );
-				}
-
-			} else if (cmd == "bind") {
-				std::string keyname;
-				advance_ws(remainder, keyname);
-				std::string action = remainder;
-				try {
-					if (auto key = _current_profile->find_key(keyname)) {
-						key->set_action( make_action(action) );
-					} else if (auto stick_key = _stick.zone(keyname)) {
-						stick_key->set_action( make_action(action) );
-					} else {
-						RETURN_FAIL( "bind key " << keyname << " unknown" );
-					}
-					G13_LOG( trace,  "bind " << keyname << " [" << action << "]" );
-				} catch (const std::exception &ex) {
-					RETURN_FAIL( "bind " << keyname << " " << action << " failed : " << ex.what() );
-				}
-			} else if (cmd == "profile") {
-				switch_to_profile(remainder);
-			} else if (cmd == "font") {
-				switch_to_font(remainder);
-			} else if (cmd == "mod") {
-				set_mode_leds(atoi(remainder));
-			} else if (cmd == "textmode ") {
-				lcd().text_mode = atoi(remainder);
-			} else if (cmd == "rgb") {
-				if (sscanf(str, "rgb %i %i %i", &red, &green, &blue) == 3) {
-					set_key_color(red, green, blue);
-				} else {
-					RETURN_FAIL( "rgb bad format: <" << str << ">" );
-				}
-			} else if (cmd == "stickmode") {
-
-				std::string mode = remainder;
-#define STICKMODE_TEST( r, data, elem )							\
-					if( mode == BOOST_PP_STRINGIZE(elem) ) {					\
-						_stick.set_mode( BOOST_PP_CAT( STICK_, elem ) );		\
-						return;													\
-					} else														\
-
-				BOOST_PP_SEQ_FOR_EACH( STICKMODE_TEST, _,
-						(ABSOLUTE)(RELATIVE)(KEYS)(CALCENTER)(CALBOUNDS)(CALNORTH) ) {
-					RETURN_FAIL( "unknown stick mode : <" << mode << ">" );
-				}
-			} else if (cmd == "stickzone") {
-				std::string operation, zonename;
-				advance_ws(remainder, operation);
-				advance_ws(remainder, zonename);
-				if (operation == "add") {
-					G13_StickZone *zone = _stick.zone(zonename, true);
-				} else {
-					G13_StickZone *zone = _stick.zone(zonename);
-					if (!zone) {
-						throw G13_CommandException("unknown stick zone");
-					}
-					if (operation == "action") {
-						zone->set_action( make_action(remainder) );
-					} else if (operation == "bounds") {
-						double x1, y1, x2, y2;
-						if (sscanf(remainder, "%lf %lf %lf %lf", &x1, &y1, &x2,
-								&y2) != 4) {
-							throw G13_CommandException("bad bounds format");
-						}
-						zone->set_bounds( G13_ZoneBounds(x1, y1, x2, y2) );
-
-					} else if (operation == "del") {
-						_stick.remove_zone(*zone);
-					} else {
-						RETURN_FAIL( "unknown stickzone operation: <" << operation << ">" );
-					}
-
-				}
-			} else if( cmd == "dump" ) {
-				std::string target;
-				advance_ws(remainder,target);
-				if( target == "all" ) {
-					dump(std::cout, 3);
-				} else if( target == "current" ) {
-					dump(std::cout, 1);
-				} else if( target == "summary" ) {
-					dump(std::cout, 0);
-				} else {
-					RETURN_FAIL( "unknown dump target: <" << target << ">" );
-				}
-
-			} else {
-				RETURN_FAIL( "unknown command: <" << str << ">" );
-			}
-		} else {
-			if (cmd == "refresh") {
-				lcd().image_send();
-			} else if (cmd == "clear") {
-				lcd().image_clear();
-				lcd().image_send();
-			} else {
-				RETURN_FAIL( "unknown command: <" << str << ">" );
-			}
-
+		auto i = _command_table.find( cmd );
+		if( i  == _command_table.end() ) {
+			RETURN_FAIL( "unknown command : " << cmd )
 		}
+		COMMAND_FUNCTION f = i->second;
+		f( remainder );
+		return;
 	} catch (const std::exception &ex) {
 		RETURN_FAIL( "command failed : " << ex.what() );
 	}
-	return;
-
 }
 
 G13_Manager::G13_Manager() :

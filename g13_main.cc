@@ -1,6 +1,7 @@
 #include "g13.h"
 
 #include <boost/program_options.hpp>
+#if 0
 #include <boost/log/core/core.hpp>
 #include <boost/log/attributes.hpp>
 #include <boost/log/trivial.hpp>
@@ -9,18 +10,16 @@
 #include <boost/log/utility/setup/console.hpp>
 #include <boost/log/expressions/formatters/stream.hpp>
 #include <boost/log/support/date_time.hpp>
+#endif
 
 using namespace std;
 using namespace G13;
 namespace po = boost::program_options;
 
 int main(int argc, char *argv[]) {
-    boost::log::core::get()->set_filter
-    (
-    		boost::log::trivial::severity >= boost::log::trivial::info
-    );
 
 	G13_Manager manager;
+	manager.set_log_level("info");
 
 	// Declare the supported options.
 	po::options_description desc("Allowed options");
@@ -36,6 +35,7 @@ int main(int argc, char *argv[]) {
 	add_string_option( "config", "load config commands from file" );
 	add_string_option( "pipe_in", "specify name for input pipe" );
 	add_string_option( "pipe_out", "specify name for output pipe" );
+	add_string_option( "log_level", "logging level" );
 	// add_string_option( "logfile", "write log to logfile" );
 
 	po::positional_options_description p;
@@ -59,6 +59,10 @@ int main(int argc, char *argv[]) {
 
 	if (vm.count("logo")) {
 		manager.set_logo(vm["logo"].as<std::string>());
+	}
+
+	if (vm.count("log_level")) {
+		manager.set_log_level( manager.string_config_value( "log_level") );
 	}
 
 	manager.run();

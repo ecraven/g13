@@ -452,11 +452,18 @@ public:
 
   int id_within_manager() const { return _id_within_manager; }
 
+  typedef boost::function<void ( const char * )> COMMAND_FUNCTION;
+  typedef std::map<std::string, COMMAND_FUNCTION> CommandFunctionTable;
+
 protected:
 
   void _init_fonts();
   void init_lcd();
+  void _init_commands();
 
+
+  //typedef void (COMMAND_FUNCTION)( G13_Device*, const char *, const char * );
+  CommandFunctionTable _command_table;
 
   struct timeval _event_time;
   struct input_event _event;
@@ -509,6 +516,9 @@ public:
 	void set_string_config_value( const std::string &name, const std::string &val );
 
 	std::string make_pipe_name( G13_Device *d, bool is_input );
+
+	void set_log_level( ::boost::log::trivial::severity_level lvl );
+	void set_log_level( const std::string & );
 
 protected:
 
