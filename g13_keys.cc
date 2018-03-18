@@ -47,7 +47,7 @@ namespace G13 {
 		(F1)(F2)(F3)(F4)(F5)(F6)(F7)(F8)(F9)(F10)(F11)(F12)					\
 		(NUMLOCK)(SCROLLLOCK)												\
 		(KP7)(KP8)(KP9)(KPMINUS)(KP4)(KP5)(KP6)(KPPLUS)						\
-		(KP1)(KP2)(KP3)(KP0)(KPDOT)											\
+		(KP1)(KP2)(KP3)(KP0)(KPDOT)(KPSLASH)								\
 		(LEFT)(RIGHT)(UP)(DOWN)												\
 		(PAGEUP)(PAGEDOWN)(HOME)(END)(INSERT)(DELETE)						\
 
