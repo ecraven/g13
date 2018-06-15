@@ -168,7 +168,7 @@ struct _map_keys_out {
 
 
 template <class STREAM_T, class MAP_T>
-STREAM_T &operator <<( STREAM_T &o, const _map_keys_out<MAP_T> &_mko ) {
+STREAM_T& operator <<( STREAM_T &o, const _map_keys_out<MAP_T> &_mko ) {
 	bool first = true;
 	for( auto i = _mko.container.begin(); i != _mko.container.end(); i++ ) {
 		if( first ) {
@@ -178,6 +178,7 @@ STREAM_T &operator <<( STREAM_T &o, const _map_keys_out<MAP_T> &_mko ) {
 			o << _mko.sep << i->first;
 		}
 	}
+	return o;
 };
 
 template <class MAP_T>

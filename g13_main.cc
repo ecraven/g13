@@ -65,6 +65,6 @@ int main(int argc, char *argv[]) {
 		manager.set_log_level( manager.string_config_value( "log_level") );
 	}
 
-	manager.run();
+	return manager.run();
 }
 
