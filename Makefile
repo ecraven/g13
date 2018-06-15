@@ -46,4 +46,4 @@ package:
 	tar cjf g13-userspace.tbz2 g13-userspace
 	rm -Rf g13-userspace
 clean: 
-	rm -f g13 pbm2lpbm
+	rm -f g13d pbm2lpbm *.o
