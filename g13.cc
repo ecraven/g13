@@ -157,6 +157,10 @@ int g13_create_uinput(G13_Device *g13) {
 	 ioctl(ufile, UI_SET_RELBIT, REL_Y);*/
 	for (int i = 0; i < 256; i++)
 		ioctl(ufile, UI_SET_KEYBIT, i);
+	//Mouse buttons
+	for (int i = 0x110; i < 0x118; i++)
+		ioctl(ufile, UI_SET_KEYBIT, i);
+
 	ioctl(ufile, UI_SET_KEYBIT, BTN_THUMB);
 
 	int retcode = write(ufile, &uinp, sizeof(uinp));
