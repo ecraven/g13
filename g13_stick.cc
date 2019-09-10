@@ -19,6 +19,7 @@ G13_Stick::G13_Stick( G13_Device &keypad ) :
 		_keypad(keypad),
 		_bounds(0,0,255,255),
 		_center_pos(127,127),
+		_current_pos(127,127),
 		_north_pos( 127, 0 )
 {
     _stick_mode = STICK_KEYS;
@@ -114,6 +115,35 @@ G13_StickZone::G13_StickZone( G13_Stick &stick, const std::string &name,  const 
 {
 	set_action( action );
 
+}
+const int tolerance = 15;
+void G13_Stick::is_joystick_active() {
+	bool changed = false;
+	if ((_current_pos.x + tolerance) < _center_pos.x
+		|| (_current_pos.x - tolerance) > _center_pos.x
+		|| (_current_pos.y + tolerance) < _center_pos.y
+		|| (_current_pos.y - tolerance) > _center_pos.y) {
+		changed = true;
+	}
+	js_active = changed;
+	if (changed) {
+		dx = _current_pos.x/16 - 8;
+		dy = _current_pos.y/16 - 8;
+	}
+}
+
+void G13_Stick::move_joystick() {
+	if (js_active) {
+		G13_LOG( debug, "x=" << _current_pos.x << " y=" << _current_pos.y <<
+						" cx=" << _center_pos.x << " cy=" << _center_pos.y <<
+						" bx=" << _bounds.br.x << " by=" << _bounds.br.y <<
+						" dx=" << dx << " dy=" << dy );
+	    _keypad.send_event(EV_REL, REL_X, dx);
+		_keypad.send_event(EV_REL, REL_Y, dy);
+	    _keypad.send_event(EV_SYN, SYN_REPORT, 0);
+	    usleep(2000);
+
+	}
 }
 
 void G13_Stick::parse_joystick(unsigned char *buf) {

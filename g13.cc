@@ -1,7 +1,9 @@
 #include "g13.h"
 #include "logo.h"
 #include <fstream>
+#include <thread>
 
+// #define TEST 1
 #if 0
 #include <boost/log/sources/severity_feature.hpp>
 #include <boost/log/sources/severity_logger.hpp>
@@ -110,6 +112,21 @@ int g13_create_fifo(const char *fifo_name) {
 	return open(fifo_name, O_RDWR | O_NONBLOCK);
 }
 
+void emit(int fd, int type, int code, int val)
+{
+   struct input_event ie;
+
+   ie.type = type;
+   ie.code = code;
+   ie.value = val;
+   /* timestamp values below are ignored */
+   ie.time.tv_sec = 0;
+   ie.time.tv_usec = 0;
+
+   write(fd, &ie, sizeof(ie));
+}
+
+
 // *************************************************************************
 
 int g13_create_uinput(G13_Device *g13) {
@@ -131,33 +148,40 @@ int g13_create_uinput(G13_Device *g13) {
 		G13_LOG( error, "Could not open uinput" );
 		return -1;
 	}
+	G13_LOG( debug, "device name (" << dev_uinput_fname << ")" );
+
 	memset(&uinp, 0, sizeof(uinp));
-	char name[] = "G13";
-	strncpy(uinp.name, name, sizeof(name));
+	strcpy(uinp.name, "G13");
 	uinp.id.version = 1;
 	uinp.id.bustype = BUS_USB;
 	uinp.id.product = G13_PRODUCT_ID;
 	uinp.id.vendor = G13_VENDOR_ID;
-	uinp.absmin[ABS_X] = 0;
-	uinp.absmin[ABS_Y] = 0;
-	uinp.absmax[ABS_X] = 0xff;
-	uinp.absmax[ABS_Y] = 0xff;
+	// uinp.absmin[ABS_X] = 0;
+	// uinp.absmin[ABS_Y] = 0;
+	// uinp.absmax[ABS_X] = 0xff;
+	// uinp.absmax[ABS_Y] = 0xff;
 	//  uinp.absfuzz[ABS_X] = 4;
 	//  uinp.absfuzz[ABS_Y] = 4;
 	//  uinp.absflat[ABS_X] = 0x80;
 	//  uinp.absflat[ABS_Y] = 0x80;
 
-	ioctl(ufile, UI_SET_EVBIT, EV_KEY);
-	ioctl(ufile, UI_SET_EVBIT, EV_ABS);
-	/*  ioctl(ufile, UI_SET_EVBIT, EV_REL);*/
 	ioctl(ufile, UI_SET_MSCBIT, MSC_SCAN);
-	ioctl(ufile, UI_SET_ABSBIT, ABS_X);
-	ioctl(ufile, UI_SET_ABSBIT, ABS_Y);
-	/*  ioctl(ufile, UI_SET_RELBIT, REL_X);
-	 ioctl(ufile, UI_SET_RELBIT, REL_Y);*/
-	for (int i = 0; i < 256; i++)
+	// ioctl(ufile, UI_SET_EVBIT, EV_ABS);
+	// ioctl(ufile, UI_SET_ABSBIT, ABS_X);
+	// ioctl(ufile, UI_SET_ABSBIT, ABS_Y);
+
+
+	ioctl(ufile, UI_SET_EVBIT, EV_REL);
+	ioctl(ufile, UI_SET_RELBIT, REL_X);
+	ioctl(ufile, UI_SET_RELBIT, REL_Y);
+
+	ioctl(ufile, UI_SET_EVBIT, EV_KEY);
+    ioctl(ufile, UI_SET_KEYBIT, BTN_LEFT);
+    ioctl(ufile, UI_SET_KEYBIT, BTN_RIGHT);
+	for (int i = 0; i < 256; i++) {
 		ioctl(ufile, UI_SET_KEYBIT, i);
-	ioctl(ufile, UI_SET_KEYBIT, BTN_THUMB);
+	}
+	// ioctl(ufile, UI_SET_KEYBIT, BTN_THUMB);
 
 	int retcode = write(ufile, &uinp, sizeof(uinp));
 	if (retcode < 0) {
@@ -169,6 +193,18 @@ int g13_create_uinput(G13_Device *g13) {
 		G13_LOG( error, "Error creating uinput device for G13" );
 		return -1;
 	}
+#ifdef TEST
+   sleep(1);
+   int i = 50;
+   /* Move the mouse diagonally, 5 units per axis */
+   while (i--) {
+      emit(ufile, EV_REL, REL_X, 5);
+      emit(ufile, EV_REL, REL_Y, 5);
+      emit(ufile, EV_SYN, SYN_REPORT, 0);
+      usleep(15000);
+   }
+#endif
+
 	return ufile;
 }
 
@@ -262,6 +298,7 @@ int G13_Device::read_keys() {
 		_current_profile->parse_keys(buffer);
 		send_event( EV_SYN, SYN_REPORT, 0);
 	}
+	_stick.is_joystick_active();
 	return 0;
 }
 
@@ -733,6 +770,16 @@ std::string G13_Manager::make_pipe_name( G13_Device *d, bool is_input ) {
 	}
 }
 
+void G13_Manager::joystick_thread() {
+	do {
+		if (g13s.size() > 0)
+			for (int i = 0; i < g13s.size(); i++) {
+				g13s[i]->stick().move_joystick();
+			}
+	} while (running);
+
+}
+
 int G13_Manager::run() {
 
 	init_keynames();
@@ -747,7 +794,7 @@ int G13_Manager::run() {
 		return 1;
 	}
 
-	libusb_set_debug(ctx, 3);
+	libusb_set_option(ctx, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_INFO);
 	cnt = libusb_get_device_list(ctx, &devs);
 	if (cnt < 0) {
 		G13_LOG( error, "Error while getting device list" );
@@ -778,6 +825,7 @@ int G13_Manager::run() {
 		g13s[0]->read_config_file( config_fn );
 	}
 
+	std::thread t(&G13_Manager::joystick_thread, this);
 	do {
 		if (g13s.size() > 0)
 			for (int i = 0; i < g13s.size(); i++) {
@@ -788,6 +836,8 @@ int G13_Manager::run() {
 			}
 	} while (running);
 	cleanup();
+	t.join();
+	return EXIT_SUCCESS;
 }
 } // namespace G13
 

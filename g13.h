@@ -3,6 +3,7 @@
 
 
 #include "helper.hpp"
+#include <atomic>
 
 #include <boost/log/trivial.hpp>
 
@@ -381,6 +382,9 @@ public:
 	const std::vector<G13_StickZone> & zones() const { return _zones; }
 
 	void				dump( std::ostream & ) const;
+	void                is_joystick_active();
+	void 				move_joystick();
+
 
 protected:
 
@@ -396,6 +400,9 @@ protected:
 	G13_StickCoord _current_pos;
 
 	stick_mode_t _stick_mode;
+
+	std::atomic<double> dx = {0}, dy = {0};
+	std::atomic<bool> js_active = {false};
 
 };
 
@@ -519,6 +526,7 @@ public:
 
 	void set_log_level( ::boost::log::trivial::severity_level lvl );
 	void set_log_level( const std::string & );
+	void joystick_thread();
 
 protected:
 
