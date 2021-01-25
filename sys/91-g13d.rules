@@ -1,0 +1,15 @@
+
+GOTO="SYSTEMD_LABEL"
+# Workaround on systems where ID_VENDOR_ID, ID_PRODUCT_ID attributes are not defined when removing device.
+ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="46d/c21c/*",\
+ACTION=="add", MODE="0666", RUN+="/bin/systemctl --no-block start g13.service"
+
+ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="46d/c21c/*",\
+ACTION=="remove", RUN+="/bin/systemctl --no-block stop g13.service"
+
+GOTO="G13_END"
+LABEL="SYSTEMD_LABEL"
+
+ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="46d/c21c/*",\
+SYMLINK+="g13kb", TAG+="systemd", MODE="0666", ENV{SYSTEMD_WANTS}="g13.service"
+LABEL="G13_END"
