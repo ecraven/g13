@@ -47,9 +47,24 @@ namespace G13 {
 		(F1)(F2)(F3)(F4)(F5)(F6)(F7)(F8)(F9)(F10)(F11)(F12)					\
 		(NUMLOCK)(SCROLLLOCK)												\
 		(KP7)(KP8)(KP9)(KPMINUS)(KP4)(KP5)(KP6)(KPPLUS)						\
-		(KP1)(KP2)(KP3)(KP0)(KPDOT)											\
+		(KP1)(KP2)(KP3)(KP0)(KPDOT)(KPSLASH)								\
 		(LEFT)(RIGHT)(UP)(DOWN)												\
 		(PAGEUP)(PAGEDOWN)(HOME)(END)(INSERT)(DELETE)						\
+		(F13)(F14)(F15)(F16)(F17)(F18)(F19)(F20)(F21)(F22)(F23)(F24)			\
+		(NEXTSONG)(PLAYPAUSE)(PREVIOUSSONG)									\
+		
+		
+/*! m_INPUT_BTN_SEQ is a Boost Preprocessor sequence containing the
+ * names of button events we can send through binding actions.
+ * These correspond to BTN_xxx value definitions in <linux/input.h>,
+ * i.e. LEFT is BTN_LEFT, RIGHT is BTN_RIGHT, etc.
+ *
+ * The binding names have prefix M to avoid naming conflicts.
+ * e.g. LEFT keyboard button and LEFT mouse button
+ * i.e. LEFT mouse button is named MLEFT, MIDDLE mouse button is MMIDDLE
+ */
+#define M_INPUT_BTN_SEQ														\
+	(LEFT)(RIGHT)(MIDDLE)(SIDE)(EXTRA)                                  	\
 
 
 // *************************************************************************
@@ -159,6 +174,18 @@ void G13_Manager::init_keynames() {
 
 
 	BOOST_PP_SEQ_FOR_EACH(ADD_KB_KEY_MAPPING, _, KB_INPUT_KEY_SEQ)
+
+	// setup maps to let us convert between strings and linux button names
+	#define ADD_M_BTN_MAPPING( r, data, elem )								\
+	{																		\
+		std::string name = string("M") + string(BOOST_PP_STRINGIZE(elem));						\
+		int keyval = BOOST_PP_CAT( BTN_, elem );							\
+		input_key_to_name[keyval] = name; 									\
+		input_name_to_key[name] = keyval;									\
+	}																		\
+
+
+	BOOST_PP_SEQ_FOR_EACH(ADD_M_BTN_MAPPING, _, M_INPUT_BTN_SEQ)
 }
 
 LINUX_KEY_VALUE G13_Manager::find_g13_key_value( const std::string &keyname ) const {

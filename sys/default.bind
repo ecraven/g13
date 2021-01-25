@@ -1,0 +1,56 @@
+# Keypad:
+#       ______________
+#      |  160x43 LCD  |
+#      |              |
+#       ‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+#     <BD> <L1> <L2> <L3> <L4> <LIGHT_STATE>
+#        <M1> <M2> <M3> <MR>
+# <G1> <G2> <G3>  <G4>  <G5>  <G6>  <G7>
+# <G8> <G9> <G10> <G11> <G12> <G13> <G14>
+#   <G15> <G16> <G17> <G18>  <G19>
+#         <G10> <G21> <G22>
+
+# Joystick:
+#             <STICK_UP>
+#   <STICK_LEFT>  <TOP>   <STICK_RIGHT>
+#            <STICK_DOWN>
+# <LEFT>
+#               <DOWN>
+#
+#
+profile none
+profile default 
+rgb 177 13 201
+
+bind G1 KEY_1
+bind G2 KEY_2
+bind G3 KEY_Q
+bind G4 KEY_W
+bind G5 KEY_E
+bind G6 KEY_R
+bind G7 KEY_T
+bind G8 KEY_3
+bind G9 KEY_4
+bind G10 KEY_A
+bind G11 KEY_S
+bind G12 KEY_D
+bind G13 KEY_F
+bind G14 KEY_G
+bind G15 KEY_LEFTSHIFT
+bind G16 KEY_Z
+bind G17 KEY_X
+bind G18 KEY_C
+bind G19 KEY_V
+bind G20 KEY_LEFTCTRL
+bind G21 KEY_LEFTALT
+bind G22 KEY_SPACE
+
+bind STICK_UP KEY_W
+bind STICK_LEFT KEY_A
+bind STICK_DOWN KEY_S
+bind STICK_RIGHT KEY_D
+bind LEFT KEY_5
+bind DOWN KEY_6
+bind TOP KEY_7
+
+profile default

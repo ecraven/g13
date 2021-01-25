@@ -1,0 +1,20 @@
+[Unit]
+Description=Logitech G13 daemon
+BindsTo=dev-g13kb.device
+After=dev-g13kb.device
+StopWhenUnneeded=true
+
+[Service]
+Type=oneshot
+User=g13d
+Group=uinput
+PIDFile=/run/g13d/pid
+RuntimeDirectory=g13d
+ExecStart=-/usr/local/bin/g13d\
+	--config /etc/g13d/default.bind \
+	--pipe_in /run/g13d/g13-0 \
+	--pipe_out /run/g13d/g13-0_out
+ExecStop=/bin/kill $MAINPID
+
+[Install]
+WantedBy=default.target
