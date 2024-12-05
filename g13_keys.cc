@@ -49,7 +49,7 @@ namespace G13 {
 		(NEXTSONG)(PLAYPAUSE)(PREVIOUSSONG)(STOPCD)					\
 		(NUMLOCK)(SCROLLLOCK)												\
 		(KP7)(KP8)(KP9)(KPMINUS)(KP4)(KP5)(KP6)(KPPLUS)						\
-		(KP1)(KP2)(KP3)(KP0)(KPDOT)											\
+		(KP1)(KP2)(KP3)(KP0)(KPDOT)(KPSLASH)								\
 		(LEFT)(RIGHT)(UP)(DOWN)												\
 		(PAGEUP)(PAGEDOWN)(HOME)(END)(INSERT)(DELETE)						\
 
