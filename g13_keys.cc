@@ -45,6 +45,8 @@ namespace G13 {
 		(COMMA)(DOT)(SLASH)(RIGHTSHIFT)(KPASTERISK)							\
 		(LEFTALT)(RIGHTALT)(SPACE)(CAPSLOCK)								\
 		(F1)(F2)(F3)(F4)(F5)(F6)(F7)(F8)(F9)(F10)(F11)(F12)					\
+		(F13)(F14)(F15)(F16)(F17)(F18)(F19)(F20)(F21)(F22)(F23)(F24)					\
+		(NEXTSONG)(PLAYPAUSE)(PREVIOUSSONG)(STOPCD)					\
 		(NUMLOCK)(SCROLLLOCK)												\
 		(KP7)(KP8)(KP9)(KPMINUS)(KP4)(KP5)(KP6)(KPPLUS)						\
 		(KP1)(KP2)(KP3)(KP0)(KPDOT)											\
@@ -216,4 +218,3 @@ void G13_Manager::display_keys() {
 }
 
 } // namespace G13
-
